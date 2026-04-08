@@ -11,6 +11,7 @@ const Sidebar = () => {
     { name: 'SaaS Overview', path: '/store', icon: Store, roles: ['system_admin'] },
     { name: 'Orders', path: '/orders', icon: ShoppingBag, roles: ['restaurant_owner'] },
     { name: 'Menu', path: '/menu', icon: UtensilsCrossed, roles: ['restaurant_owner'] },
+    { name: 'Customers', path: '/customers', icon: Users, roles: ['restaurant_owner'] },
     { name: 'Tables', path: '/tables', icon: TableProperties, roles: ['restaurant_owner'] },
     { name: 'Staff', path: '/staff', icon: Users, roles: ['restaurant_owner'] },
     { name: 'Subscriptions', path: '/subscriptions', icon: CreditCard, roles: ['restaurant_owner'] },

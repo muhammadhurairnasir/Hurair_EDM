@@ -40,3 +40,34 @@ export const getMyOrders = async (req, res) => {
     errorResponse(res, 500, error.message);
   }
 };
+
+export const getCustomerCRM = async (req, res) => {
+  try {
+    // Find all distinct customers who ordered from this exact restaurant
+    const customerIds = await Order.distinct('customerId', { restaurantId: req.user.restaurantId });
+    const customers = await User.find({ _id: { $in: customerIds } }).select('-password');
+    successResponse(res, 200, 'Customer CRM Fetched', customers);
+  } catch (error) {
+    errorResponse(res, 500, error.message);
+  }
+};
+
+export const updateCustomerProfile = async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+    const user = await User.findById(req.user._id);
+    if (!user) return errorResponse(res, 404, 'User not found');
+
+    if (name) user.name = name;
+    if (email) user.email = email;
+    if (password) user.password = password; // pre-save hook handles hashing
+
+    await user.save();
+    
+    // Return sanitized user
+    const updatedUser = await User.findById(user._id).select('-password');
+    successResponse(res, 200, 'Profile updated successfully', updatedUser);
+  } catch (error) {
+    errorResponse(res, 500, error.message);
+  }
+};

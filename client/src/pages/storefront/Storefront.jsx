@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { ShoppingBag, X, CheckCircle2, Heart, UserCircle, ArrowLeft, Sparkles } from 'lucide-react';
+import { ShoppingBag, X, CheckCircle2, Heart, UserCircle, ArrowLeft, Sparkles, Search } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
 import api from '../../services/api.js';
@@ -12,23 +12,79 @@ import Chatbot from '../../components/storefront/Chatbot.jsx';
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 
 const Storefront = () => {
-  const { restaurantId } = useParams();
+  const { slug } = useParams();
+  const [restaurantId, setRestaurantId] = useState(null);
   const navigate = useNavigate();
   const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
-  const [cart, setCart] = useState([]);
+  const [cart, setCart] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`cart_${slug}`);
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
   const [wishlist, setWishlist] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [checkoutStep, setCheckoutStep] = useState('cart'); // 'cart' | 'payment' | 'success'
   const [clientSecret, setClientSecret] = useState('');
   const [seoConfig, setSeoConfig] = useState({ title: 'Order Online', description: 'Browse our delicious menu and order online.' });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [promoCode, setPromoCode] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState('');
+  const [activeCategory, setActiveCategory] = useState('All');
+  const [sortOption, setSortOption] = useState('default');
+
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    return items.filter(i => 
+      i.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      (i.brand && i.brand.toLowerCase().includes(searchQuery.toLowerCase()))
+    ).slice(0, 5);
+  }, [searchQuery, items]);
+
+  const filteredAndSortedItems = useMemo(() => {
+    let result = activeCategory === 'All' ? [...items] : items.filter(i => i.category === activeCategory);
+    if (sortOption === 'price_asc') result.sort((a,b) => a.price - b.price);
+    else if (sortOption === 'price_desc') result.sort((a,b) => b.price - a.price);
+    return result;
+  }, [items, activeCategory, sortOption]);
 
   useEffect(() => {
+    resolveSlug();
+  }, [slug]);
+
+  useEffect(() => {
+    if (slug) localStorage.setItem(`cart_${slug}`, JSON.stringify(cart));
+  }, [cart, slug]);
+
+  useEffect(() => {
+    if (!restaurantId) return;
     fetchPublicMenu();
     fetchRecommendations();
     if (user?.role === 'customer') fetchWishlist();
   }, [restaurantId, user]);
+
+  const resolveSlug = async () => {
+    try {
+      const { data } = await api.get(`/menu/public/store/resolve/${slug}`);
+      if (data.data) {
+        // Enforce canonical SEO URLs: If loaded via _id, redirect instantly
+        if (data.data.seo?.slug && data.data.seo.slug !== slug) {
+          navigate(`/store/${data.data.seo.slug}`, { replace: true });
+          return;
+        }
+
+        setRestaurantId(data.data._id);
+        if(data.data.seo?.title) {
+          setSeoConfig({ title: data.data.seo.title, description: data.data.seo.description });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to resolve store', error);
+      setSeoConfig({ title: 'Store Not Found', description: '' });
+    }
+  };
 
   const fetchPublicMenu = async () => {
     try {
@@ -61,7 +117,7 @@ const Storefront = () => {
   };
 
   const toggleWishlist = async (itemId) => {
-    if (!user || user.role !== 'customer') { navigate(`/store/${restaurantId}/login`); return; }
+    if (!user || user.role !== 'customer') { navigate(`/store/${slug}/login`); return; }
     try {
       await api.post('/customer/wishlist', { menuItemId: itemId });
       setWishlist(prev => prev.includes(itemId) ? prev.filter(id => id !== itemId) : [...prev, itemId]);
@@ -85,14 +141,25 @@ const Storefront = () => {
   };
 
   const handleProceedToPayment = async () => {
+    if (!user) { navigate(`/store/${slug}/login`); return; }
+    if (totalCartValue < 0.50) { alert('Minimum order is $0.50'); return; }
+
     try {
-      const totalAmount = cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
-      const { data } = await api.post('/payments/create-payment-intent', { amount: totalAmount });
+      const { data } = await api.post('/payments/create-payment-intent', { amount: totalCartValue, promoCode: appliedPromo });
       setClientSecret(data.data.clientSecret);
       setCheckoutStep('payment');
     } catch (error) {
       console.error(error);
-      alert('Could not initialize payment. Please try again.');
+      alert('Failed to initialize payment');
+    }
+  };
+
+  const handleApplyPromo = () => {
+    const code = promoCode.trim().toUpperCase();
+    if (code === 'SAVE5' || code === 'FIRST10') {
+      setAppliedPromo(code);
+    } else {
+      alert('Invalid Promo Code');
     }
   };
 
@@ -115,8 +182,19 @@ const Storefront = () => {
     appearance: { theme: 'stripe' },
   };
 
+  if (!restaurantId) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900">Store Not Found</h1>
+          <p className="text-gray-500 mt-2">Make sure you have the correct URL.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50 font-sans">
+    <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
       <Helmet>
         <title>{seoConfig.title}</title>
         <meta name="description" content={seoConfig.description} />
@@ -128,11 +206,11 @@ const Storefront = () => {
           <Link to="/" className="text-xl font-bold tracking-tight text-gray-900 border border-gray-200 px-3 py-1 rounded-lg">Restaurant Store</Link>
           <div className="flex items-center gap-6">
             {user?.role === 'customer' ? (
-              <Link to={`/store/${restaurantId}/dashboard`} className="text-sm font-bold text-blue-600 hover:text-blue-700 transition-colors flex items-center gap-1">
+              <Link to={`/store/${slug}/dashboard`} className="text-sm font-bold text-blue-600 hover:text-blue-700 transition-colors flex items-center gap-1">
                 <UserCircle className="w-5 h-5" /> Dashboard
               </Link>
             ) : (
-              <Link to={`/store/${restaurantId}/login`} className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">Sign In</Link>
+              <Link to={`/store/${slug}/login`} className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">Sign In</Link>
             )}
             <button onClick={() => { setIsCartOpen(true); setCheckoutStep('cart'); }}
               className="relative p-2 text-gray-600 hover:text-blue-600 transition-colors bg-gray-100 hover:bg-blue-50 rounded-full">
@@ -154,7 +232,10 @@ const Storefront = () => {
             </h2>
             <div className="flex gap-6 overflow-x-auto pb-4 snap-x">
               {recommendations.map(item => (
-                <div key={item._id} className="min-w-[280px] bg-white rounded-2xl p-4 shadow-sm border border-blue-100/50 flex flex-col snap-start">
+                <div key={item._id} className="min-w-[280px] bg-white rounded-2xl p-4 shadow-sm border border-blue-100/50 flex flex-col snap-start overflow-hidden text-gray-900">
+                  <div className="w-full h-32 mb-3 rounded-xl overflow-hidden shrink-0 bg-gray-50">
+                    <img src={item.images?.[0] || `https://picsum.photos/seed/${item._id}/400/300`} alt={item.name} className="w-full h-full object-cover" />
+                  </div>
                   <div className="flex justify-between items-start mb-2">
                     <span className="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">Trending</span>
                   </div>
@@ -172,28 +253,104 @@ const Storefront = () => {
 
       {/* Menu Grid */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="mb-8">
-          <h1 className="text-3xl font-extrabold text-gray-900 mb-2">Our Menu</h1>
-          <p className="text-gray-500">Delicious items expertly crafted and ready to order.</p>
-        </div>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
+            <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">Our Menu</h2>
+            
+            {/* Autocomplete Search Bar */}
+            <div className="relative w-full md:w-72">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="h-5 w-5 text-gray-400" />
+              </div>
+              <input
+                type="text"
+                placeholder="Search products, brands..."
+                className="w-full bg-white border border-gray-200 rounded-xl py-2 pl-10 pr-4 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {/* Autocomplete Dropdown */}
+              {searchQuery && (
+                <div className="absolute z-50 mt-2 w-full bg-white border border-gray-100 rounded-xl shadow-xl overflow-hidden">
+                  {searchResults.length === 0 ? (
+                    <div className="p-4 text-sm text-gray-500 text-center">No products found.</div>
+                  ) : (
+                    searchResults.map(result => (
+                      <Link 
+                        key={result._id} 
+                        to={`/store/${slug}/item/${result.seo?.slug || result._id}`}
+                        className="flex items-center px-4 py-3 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
+                      >
+                        <div className="flex-1">
+                          <p className="text-sm font-bold text-gray-900">{result.name}</p>
+                          <p className="text-[10px] text-gray-500 uppercase">{result.brand || 'House Brand'}</p>
+                        </div>
+                        <span className="text-sm font-bold text-emerald-600">${result.price.toFixed(2)}</span>
+                      </Link>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+          
+          <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-8">
+            <div className="flex gap-2 overflow-x-auto pb-2 flex-grow">
+              {['All', ...Array.from(new Set(items.map(i => i.category)))].map(cat => (
+                <button 
+                  key={cat} 
+                  onClick={() => setActiveCategory(cat)}
+                  className={`px-4 py-2 rounded-full border text-sm font-bold whitespace-nowrap transition-colors ${activeCategory === cat ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-500 hover:text-blue-600'}`}>
+                  {cat}
+                </button>
+              ))}
+            </div>
+            
+            <div className="w-full md:w-auto">
+              <select 
+                value={sortOption} 
+                onChange={e => setSortOption(e.target.value)}
+                className="bg-white border border-gray-200 text-gray-700 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block w-full px-4 py-2 font-bold cursor-pointer outline-none"
+              >
+                <option value="default">Sort by: Recommended</option>
+                <option value="price_asc">Price: Low to High</option>
+                <option value="price_desc">Price: High to Low</option>
+              </select>
+            </div>
+          </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {items.map(item => (
+          {filteredAndSortedItems.map(item => (
             <div key={item._id} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col hover:shadow-md transition-shadow">
+              <div className="w-full h-40 mb-4 rounded-xl overflow-hidden bg-gray-100 shrink-0">
+                <img src={item.images?.[0] || `https://picsum.photos/seed/${item._id}/400/300`} alt={item.name} className="w-full h-full object-cover" />
+              </div>
               <div className="flex justify-between items-start mb-3">
                 <span className="bg-blue-50 text-blue-700 text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">{item.category}</span>
                 <button onClick={() => toggleWishlist(item._id)} className="transition-colors">
                   <Heart className={`w-6 h-6 ${wishlist.includes(item._id) ? 'fill-red-500 text-red-500' : 'text-gray-300 hover:text-red-400'}`} />
                 </button>
               </div>
-              <h3 className="text-lg font-bold text-gray-900">{item.name}</h3>
-              <p className="text-sm text-gray-500 mt-2 line-clamp-2 flex-grow">{item.description || 'No description available.'}</p>
-              <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
-                <span className="text-xl font-extrabold text-emerald-600">${item.price.toFixed(2)}</span>
-                <button onClick={() => addToCart(item)} className="bg-gray-900 hover:bg-gray-800 text-white font-semibold py-2 px-4 rounded-xl transition-colors">Add</button>
+              <h3 className="text-lg font-bold text-gray-900 line-clamp-1">{item.name}</h3>
+              <p className="text-[10px] uppercase font-bold text-gray-400 mb-2">{item.brand || 'House Brand'}</p>
+              <p className="text-sm text-gray-500 line-clamp-2 flex-grow mb-3">{item.description || 'No description available.'}</p>
+              
+              {/* Product Page Link */}
+              <Link to={`/store/${slug}/item/${item.seo?.slug || item._id}`} className="text-xs text-blue-600 font-bold hover:underline mb-3 inline-block">
+                View Full Details & Reviews &rarr;
+              </Link>
+              
+              <div className="mt-auto pt-4 border-t border-gray-100 flex items-center justify-between">
+                <div>
+                  <span className="text-xl font-extrabold text-emerald-600">${item.price.toFixed(2)}</span>
+                  {item.stock < 10 && <p className="text-[10px] text-red-500 font-bold">Only {item.stock} left!</p>}
+                </div>
+                <button onClick={() => addToCart(item)} disabled={item.stock === 0} className="bg-gray-900 hover:bg-gray-800 disabled:opacity-50 text-white font-semibold py-2 px-4 rounded-xl transition-colors">
+                  {item.stock === 0 ? 'Out of Stock' : 'Add'}
+                </button>
               </div>
             </div>
           ))}
-          {items.length === 0 && <div className="col-span-full py-12 text-center text-gray-500">No menu items available yet.</div>}
+          {filteredAndSortedItems.length === 0 && <div className="col-span-full py-12 text-center text-gray-500">No menu items match your filters.</div>}
         </div>
       </main>
 
@@ -201,7 +358,7 @@ const Storefront = () => {
       {isCartOpen && (
         <>
           <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50" onClick={() => setIsCartOpen(false)}></div>
-          <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl z-50 flex flex-col">
+          <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl z-50 flex flex-col text-gray-900">
             
             {/* Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-100">
@@ -242,24 +399,44 @@ const Storefront = () => {
                   ) : (
                     cart.map(item => (
                       <div key={item.menuItem} className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                        <div className="flex-1">
+                        <div className="flex flex-col flex-1 pl-3">
                           <h4 className="font-bold text-gray-900">{item.name}</h4>
                           <span className="text-emerald-600 font-medium">${item.price.toFixed(2)}</span>
                         </div>
-                        <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-2 py-1">
-                          <button onClick={() => updateQuantity(item.menuItem, -1)} className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-lg">-</button>
-                          <span className="w-4 text-center font-bold text-sm">{item.quantity}</span>
-                          <button onClick={() => updateQuantity(item.menuItem, 1)} className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-lg">+</button>
+                        <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-2 py-1 text-gray-900">
+                          <button onClick={() => updateQuantity(item.menuItem, -1)} className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-lg text-gray-900 font-bold">-</button>
+                          <span className="w-4 text-center font-bold text-sm text-gray-900">{item.quantity}</span>
+                          <button onClick={() => updateQuantity(item.menuItem, 1)} className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-lg text-gray-900 font-bold">+</button>
                         </div>
                       </div>
                     ))
                   )}
                 </div>
                 {cart.length > 0 && (
-                  <div className="p-6 border-t border-gray-100">
-                    <div className="flex justify-between items-center mb-4">
+                <div className="p-6 border-t border-gray-100 bg-gray-50/50">
+                    <div className="flex gap-2 mb-4">
+                      <input 
+                        type="text" 
+                        placeholder="Promo Code" 
+                        className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm uppercase focus:outline-none"
+                        value={promoCode}
+                        onChange={(e) => setPromoCode(e.target.value)}
+                        disabled={!!appliedPromo}
+                      />
+                      <button 
+                        onClick={appliedPromo ? () => { setAppliedPromo(''); setPromoCode(''); } : handleApplyPromo}
+                        className={`px-4 py-2 text-sm font-bold rounded-xl transition-colors ${appliedPromo ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
+                      >
+                        {appliedPromo ? 'Remove' : 'Apply'}
+                      </button>
+                    </div>
+                    {appliedPromo && <p className="text-sm font-bold text-emerald-600 mb-4 px-1">{appliedPromo} applied!</p>}
+
+                    <div className="flex justify-between items-center mb-4 px-1">
                       <span className="text-gray-500 text-lg">Total</span>
-                      <span className="text-2xl font-extrabold text-gray-900">${totalCartValue.toFixed(2)}</span>
+                      <span className="text-2xl font-extrabold text-gray-900">
+                        ${appliedPromo === 'SAVE5' && totalCartValue > 5 ? (totalCartValue - 5).toFixed(2) : appliedPromo === 'FIRST10' ? (totalCartValue * 0.9).toFixed(2) : totalCartValue.toFixed(2)}
+                      </span>
                     </div>
                     <button onClick={handleProceedToPayment}
                       className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-blue-600/30">
@@ -286,8 +463,13 @@ const Storefront = () => {
         </>
       )}
 
-      {/* Floating Waiter/Chatbot */}
-      <Chatbot restaurantId={restaurantId} customerId={user?._id} />
+      {/* Floating Waiter/Chatbot — cart passed for abandoned-cart detection */}
+      <Chatbot 
+        restaurantId={restaurantId} 
+        customerId={user?._id} 
+        cart={cart} 
+        onAddToCart={addToCart} 
+      />
     </div>
   );
 };

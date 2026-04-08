@@ -5,6 +5,9 @@ const menuItemSchema = new mongoose.Schema({
   name: { type: String, required: true },
   price: { type: Number, required: true },
   category: { type: String, required: true },
+  brand: { type: String, default: 'House Brand' },
+  stock: { type: Number, default: 100 },
+  images: { type: [String], default: [] },
   availability: { type: Boolean, default: true },
   description: { type: String },
   seo: {

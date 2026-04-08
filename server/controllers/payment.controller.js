@@ -4,10 +4,20 @@ import { successResponse, errorResponse } from '../utils/responseHandler.js';
 // Creates a PaymentIntent and returns the client_secret to the frontend
 export const createPaymentIntent = async (req, res) => {
   try {
-    const { amount } = req.body; // amount in dollars (e.g. 29.99)
+    let { amount, promoCode } = req.body; // amount in dollars (e.g. 29.99)
 
     if (!amount || amount <= 0) {
       return errorResponse(res, 400, 'Invalid amount');
+    }
+
+    // Mathematical Promo Reducer
+    if (promoCode) {
+      const code = promoCode.toUpperCase();
+      if (code === 'SAVE5' && amount > 5) {
+        amount -= 5;
+      } else if (code === 'FIRST10') {
+        amount = amount * 0.9;
+      }
     }
 
     // Initialize Stripe lazily so dotenv has already loaded the key

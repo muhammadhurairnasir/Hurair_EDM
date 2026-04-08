@@ -11,20 +11,35 @@ const ECommerceDashboard = () => {
     totalOrders: 0,
     monthlyRecurringRevenue: 0
   });
+  const [subscriptions, setSubscriptions] = useState([]);
 
   useEffect(() => {
     const fetchStats = async () => {
       try {
         const { data } = await api.get('/system/stats');
-        if (data.data) {
-          setStats(data.data);
-        }
-      } catch (error) {
-        console.error('Error fetching system stats:', error);
-      }
+        if (data.data) setStats(data.data);
+      } catch (error) { console.error('Error fetching stats:', error); }
     };
+    const fetchSubs = async () => {
+      try {
+        const { data } = await api.get('/system/subscriptions');
+        if (data.data) setSubscriptions(data.data);
+      } catch (error) { console.error('Error fetching subs:', error); }
+    }
     fetchStats();
+    fetchSubs();
   }, []);
+
+  const handleUpdatePlan = async (subId, newPlan) => {
+    if(!confirm(`Force update this subscription to ${newPlan}?`)) return;
+    try {
+      await api.put(`/system/subscriptions/${subId}`, { plan: newPlan });
+      setSubscriptions(subs => subs.map(s => s._id === subId ? { ...s, plan: newPlan } : s));
+      alert('Subscription forcibly updated.');
+    } catch {
+      alert('Failed to update subscription.');
+    }
+  };
 
   return (
     <div>
@@ -80,6 +95,57 @@ const ECommerceDashboard = () => {
              <h4 className="font-semibold text-gray-300 mb-2">Item-Level SEO overrides</h4>
              <p className="text-sm text-gray-400">All Menu items automatically generate optimized slugs based on their names. You can modify their exact {'<title>'} and {'<meta name="description">'} inside the Menu Item editor to target long-tail keywords better.</p>
            </div>
+        </div>
+      </div>
+
+      <div className="mt-8 bg-gray-800 border border-gray-700 rounded-2xl p-6">
+        <h3 className="text-lg font-bold mb-4 border-b border-gray-700 pb-2 flex items-center justify-between">
+          <span>Global POS Subscriptions</span>
+          <span className="text-xs font-normal text-gray-400 bg-gray-900 px-3 py-1 rounded-full">{subscriptions.length} active tenants</span>
+        </h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="text-gray-400 text-sm border-b border-gray-700">
+                <th className="py-3 px-4 font-semibold">Restaurant Name</th>
+                <th className="py-3 px-4 font-semibold">Storefront SEO Slug</th>
+                <th className="py-3 px-4 font-semibold">Current Plan</th>
+                <th className="py-3 px-4 font-semibold">Status</th>
+                <th className="py-3 px-4 font-semiboldtext-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {subscriptions.map(sub => (
+                <tr key={sub._id} className="border-b border-gray-700/50 hover:bg-gray-700/30 transition-colors">
+                  <td className="py-4 px-4 font-medium text-gray-200">{sub.restaurantId?.name || 'Unknown'}</td>
+                  <td className="py-4 px-4 text-blue-400 text-sm">/store/{sub.restaurantId?.seo?.slug || 'unknown'}</td>
+                  <td className="py-4 px-4">
+                    <span className={`px-2 py-1 rounded text-xs font-bold uppercase tracking-wider ${sub.plan === 'Premium' ? 'bg-purple-500/20 text-purple-400' : sub.plan === 'Standard' ? 'bg-blue-500/20 text-blue-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                      {sub.plan}
+                    </span>
+                  </td>
+                  <td className="py-4 px-4">
+                    <span className={`px-2 flex items-center gap-1 py-1 rounded-full text-xs font-bold w-max ${sub.status === 'active' ? 'text-emerald-400 bg-emerald-400/10' : 'text-red-400 bg-red-400/10'}`}>
+                      <div className={`w-2 h-2 rounded-full ${sub.status === 'active' ? 'bg-emerald-400' : 'bg-red-400'}`}></div>
+                      {sub.status}
+                    </span>
+                  </td>
+                  <td className="py-4 px-4">
+                    <select 
+                      className="bg-gray-900 border border-gray-600 text-sm rounded-lg px-2 py-1 text-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                      value={sub.plan}
+                      onChange={(e) => handleUpdatePlan(sub._id, e.target.value)}
+                    >
+                      <option value="Basic">Force Basic</option>
+                      <option value="Standard">Force Standard</option>
+                      <option value="Premium">Force Premium</option>
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {subscriptions.length === 0 && <p className="text-gray-400 text-center py-6">No active subscriptions found in the platform.</p>}
         </div>
       </div>
     </div>

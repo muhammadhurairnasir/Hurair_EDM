@@ -6,21 +6,22 @@ import api from '../../services/api.js';
 import { useAuth } from '../../hooks/useAuth.js';
 
 const CustomerDashboard = () => {
-  const { restaurantId } = useParams();
+  const { slug } = useParams();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   
   const [orders, setOrders] = useState([]);
   const [wishlist, setWishlist] = useState([]);
-  const [activeTab, setActiveTab] = useState('orders');
+  const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'wishlist' | 'settings'
+  const [formData, setFormData] = useState({ name: user?.name || '', email: user?.email || '', password: '' });
 
   useEffect(() => {
     if (!user || user.role !== 'customer') {
-      navigate(`/store/${restaurantId}/login`);
+      navigate(`/store/${slug}/login`);
       return;
     }
     fetchCustomerData();
-  }, [user, restaurantId]);
+  }, [user, slug]);
 
   const fetchCustomerData = async () => {
     try {
@@ -37,7 +38,18 @@ const CustomerDashboard = () => {
   
   const handleLogout = () => {
     logout();
-    navigate(`/store/${restaurantId}`);
+    navigate(`/store/${slug}`);
+  };
+
+  const handleUpdateProfile = async (e) => {
+    e.preventDefault();
+    try {
+      await api.put('/customer/profile', formData);
+      alert('Profile updated successfully! Login again to see changes immediately.');
+      setFormData({ ...formData, password: '' });
+    } catch (error) {
+      alert('Failed to update profile');
+    }
   };
 
   const getStatusColor = (status) => {
@@ -47,14 +59,14 @@ const CustomerDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans">
+    <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
       <Helmet>
         <title>My Dashboard | Storefront</title>
       </Helmet>
 
       <header className="bg-white shadow-sm sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <Link to={`/store/${restaurantId}`} className="text-gray-500 hover:text-gray-900 inline-flex items-center gap-2 font-medium">
+          <Link to={`/store/${slug}`} className="text-gray-500 hover:text-gray-900 inline-flex items-center gap-2 font-medium">
             <ArrowLeft className="w-4 h-4" /> Back to Store
           </Link>
           <button onClick={handleLogout} className="text-sm font-medium text-red-600 hover:text-red-700 transition-colors flex items-center gap-1">
@@ -84,6 +96,13 @@ const CustomerDashboard = () => {
             SAVED ITEMS
             {activeTab === 'wishlist' && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600"></span>}
           </button>
+          <button 
+            className={`pb-4 text-sm font-bold tracking-wide transition-colors relative ${activeTab === 'settings' ? 'text-blue-600' : 'text-gray-500 hover:text-gray-800'}`}
+            onClick={() => setActiveTab('settings')}
+          >
+            SETTINGS
+            {activeTab === 'settings' && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600"></span>}
+          </button>
         </div>
 
         {activeTab === 'orders' ? (
@@ -93,7 +112,7 @@ const CustomerDashboard = () => {
                 <Package className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                 <h3 className="text-lg font-bold text-gray-900">No orders yet</h3>
                 <p className="text-gray-500 mt-1">When you place an order, it will appear here.</p>
-                <Link to={`/store/${restaurantId}`} className="inline-block mt-6 text-blue-600 font-bold hover:underline">Start an order</Link>
+                <Link to={`/store/${slug}`} className="inline-block mt-6 text-blue-600 font-bold hover:underline">Start an order</Link>
               </div>
             ) : (
               orders.map(order => (
@@ -118,7 +137,7 @@ const CustomerDashboard = () => {
               ))
             )}
           </div>
-        ) : (
+        ) : activeTab === 'wishlist' ? (
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {wishlist.length === 0 ? (
               <div className="col-span-full text-center py-16 bg-white rounded-2xl border border-gray-100">
@@ -142,7 +161,28 @@ const CustomerDashboard = () => {
               ))
             )}
           </div>
-        )}
+        ) : activeTab === 'settings' ? (
+          <div className="max-w-xl mx-auto bg-white rounded-2xl p-8 border border-gray-100 shadow-sm">
+            <h3 className="text-xl font-bold text-gray-900 mb-6">Profile Settings</h3>
+            <form onSubmit={handleUpdateProfile} className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Full Name</label>
+                <input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Email Address</label>
+                <input type="email" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">New Password (Optional)</label>
+                <input type="password" placeholder="Leave blank to keep current" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} />
+              </div>
+              <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition-all shadow-md mt-4">
+                Update Profile
+              </button>
+            </form>
+          </div>
+        ) : null}
       </main>
     </div>
   );

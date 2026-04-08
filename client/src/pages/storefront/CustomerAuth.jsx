@@ -5,7 +5,7 @@ import api from '../../services/api.js';
 import { UtensilsCrossed, ArrowLeft } from 'lucide-react';
 
 const CustomerAuth = () => {
-  const { restaurantId } = useParams();
+  const { slug } = useParams();
   const navigate = useNavigate();
   const { login } = useAuth();
   
@@ -21,11 +21,11 @@ const CustomerAuth = () => {
     try {
       if (isLogin) {
         await login(formData.email, formData.password);
-        navigate(`/store/${restaurantId}`);
+        navigate(`/store/${slug}`);
       } else {
         const { data } = await api.post('/auth/register-customer', formData);
         localStorage.setItem('user', JSON.stringify(data.data)); // FIX: Store under 'user' key so API interceptor and AuthContext load it.
-        window.location.href = `/store/${restaurantId}`;
+        window.location.href = `/store/${slug}`;
       }
     } catch (err) {
       setError(err.response?.data?.message || 'Authentication failed');
@@ -35,9 +35,9 @@ const CustomerAuth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 text-gray-900">
       <div className="w-full max-w-md bg-white p-8 rounded-3xl border border-gray-100 shadow-xl">
-        <Link to={`/store/${restaurantId}`} className="text-sm text-gray-500 hover:text-gray-900 inline-flex items-center gap-1 mb-6">
+        <Link to={`/store/${slug}`} className="text-sm text-gray-500 hover:text-gray-900 inline-flex items-center gap-1 mb-6">
           <ArrowLeft className="w-4 h-4" /> Back to Store
         </Link>
         <div className="flex flex-col items-center mb-8">
@@ -60,7 +60,7 @@ const CustomerAuth = () => {
               <label className="block text-sm font-bold text-gray-700 mb-1">Full Name</label>
               <input
                 type="text" required
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors text-gray-900"
                 value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})}
               />
             </div>
@@ -69,7 +69,7 @@ const CustomerAuth = () => {
             <label className="block text-sm font-bold text-gray-700 mb-1">Email Address</label>
             <input
               type="email" required
-              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors text-gray-900"
               value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})}
             />
           </div>
@@ -77,7 +77,7 @@ const CustomerAuth = () => {
             <label className="block text-sm font-bold text-gray-700 mb-1">Password</label>
             <input
               type="password" required minLength="6"
-              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors text-gray-900"
               value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})}
             />
           </div>

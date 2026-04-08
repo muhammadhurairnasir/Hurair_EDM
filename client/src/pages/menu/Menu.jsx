@@ -10,6 +10,7 @@ const Menu = () => {
   const [editId, setEditId] = useState(null);
   const [formData, setFormData] = useState({ 
     name: '', price: '', category: 'Mains', description: '',
+    brand: '', stock: 100, images: '',
     seoTitle: '', seoDescription: '', seoKeywords: ''
   });
 
@@ -41,6 +42,9 @@ const Menu = () => {
         price: Number(formData.price),
         category: formData.category,
         description: formData.description,
+        brand: formData.brand,
+        stock: Number(formData.stock),
+        images: formData.images ? formData.images.split(',').map(i => i.trim()) : [],
         seo: {
           title: formData.seoTitle,
           description: formData.seoDescription,
@@ -69,6 +73,9 @@ const Menu = () => {
       price: item.price,
       category: item.category || 'Mains',
       description: item.description || '',
+      brand: item.brand || '',
+      stock: item.stock ?? 100,
+      images: item.images ? item.images.join(', ') : '',
       seoTitle: item.seo?.title || '',
       seoDescription: item.seo?.description || '',
       seoKeywords: item.seo?.keywords ? item.seo?.keywords.join(', ') : ''
@@ -79,7 +86,7 @@ const Menu = () => {
   const closeModal = () => {
     setIsModalOpen(false);
     setEditId(null);
-    setFormData({ name: '', price: '', category: 'Mains', description: '', seoTitle: '', seoDescription: '', seoKeywords: '' });
+    setFormData({ name: '', price: '', category: 'Mains', description: '', brand: '', stock: 100, images: '', seoTitle: '', seoDescription: '', seoKeywords: '' });
   };
 
   return (
@@ -149,7 +156,22 @@ const Menu = () => {
             ></textarea>
           </div>
 
-          <div className="border-t border-gray-700 pt-4 mt-6">
+          <div className="grid grid-cols-2 gap-4 border-t border-gray-700 pt-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-1">Brand</label>
+              <input type="text" placeholder="e.g. Nike" className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2 focus:ring-1 focus:ring-blue-500 outline-none text-sm" value={formData.brand} onChange={e => setFormData({...formData, brand: e.target.value})} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-1">Stock</label>
+              <input type="number" className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2 focus:ring-1 focus:ring-blue-500 outline-none text-sm" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-gray-400 mb-1">Images (Comma Separated URLs)</label>
+              <input type="text" className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2 focus:ring-1 focus:ring-blue-500 outline-none text-sm" value={formData.images} onChange={e => setFormData({...formData, images: e.target.value})} />
+            </div>
+          </div>
+
+          <div className="border-t border-gray-700 pt-4 mt-2">
             <h3 className="text-sm font-bold text-gray-300 mb-3 tracking-wide uppercase">Storefront SEO Details</h3>
             <div className="space-y-4">
               <div>
