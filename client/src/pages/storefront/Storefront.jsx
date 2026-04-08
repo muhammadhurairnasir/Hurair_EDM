@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { ShoppingBag, X, CheckCircle2, Heart, UserCircle, ArrowLeft, Sparkles, Search } from 'lucide-react';
+import { ShoppingBag, X, CheckCircle2, Heart, UserCircle, ArrowLeft, Sparkles, Search, Trash2 } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
 import api from '../../services/api.js';
@@ -140,6 +140,10 @@ const Storefront = () => {
     }));
   };
 
+  const removeFromCart = (itemId) => {
+    setCart(prev => prev.filter(i => i.menuItem !== itemId));
+  };
+
   const handleProceedToPayment = async () => {
     if (!user) { navigate(`/store/${slug}/login`); return; }
     if (totalCartValue < 0.50) { alert('Minimum order is $0.50'); return; }
@@ -223,6 +227,22 @@ const Storefront = () => {
         </div>
       </header>
 
+      {/* Stunning Hero Section */}
+      <div className="relative w-full h-[350px] md:h-[450px] overflow-hidden shadow-sm">
+        <img src={`https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&q=80`} alt="Magnificent Restaurant View" className="absolute inset-0 w-full h-full object-cover scale-105" />
+        <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/60 to-transparent"></div>
+        <div className="absolute inset-0 bg-blue-900/10 mix-blend-multiply"></div>
+        <div className="absolute bottom-0 left-0 w-full p-6 md:p-16 max-w-7xl mx-auto flex flex-col justify-end h-full">
+          <span className="text-blue-400 font-bold tracking-widest uppercase text-sm mb-3 drop-shadow">Welcome to the table</span>
+          <h1 className="text-4xl md:text-6xl font-extrabold text-white mb-4 tracking-tight drop-shadow-lg leading-tight">
+            {seoConfig.title}
+          </h1>
+          <p className="text-lg md:text-xl text-gray-200 max-w-2xl font-medium drop-shadow-md leading-relaxed border-l-4 border-blue-500 pl-4">
+            {seoConfig.description}
+          </p>
+        </div>
+      </div>
+
       {/* Recommendations Carousel */}
       {recommendations.length > 0 && (
         <section className="bg-blue-600/5 py-10 border-b border-blue-100">
@@ -230,11 +250,12 @@ const Storefront = () => {
             <h2 className="text-xl font-bold flex items-center gap-2 text-blue-900 mb-6">
               <Sparkles className="w-5 h-5 text-blue-600" /> AI Recommendations for You
             </h2>
-            <div className="flex gap-6 overflow-x-auto pb-4 snap-x">
+            <div className="flex gap-6 overflow-x-auto pb-4 snap-x py-4">
               {recommendations.map(item => (
-                <div key={item._id} className="min-w-[280px] bg-white rounded-2xl p-4 shadow-sm border border-blue-100/50 flex flex-col snap-start overflow-hidden text-gray-900">
-                  <div className="w-full h-32 mb-3 rounded-xl overflow-hidden shrink-0 bg-gray-50">
-                    <img src={item.images?.[0] || `https://picsum.photos/seed/${item._id}/400/300`} alt={item.name} className="w-full h-full object-cover" />
+                <div key={item._id} className="min-w-[280px] bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col snap-start overflow-hidden text-gray-900 hover:-translate-y-2 hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] hover:border-blue-200 transition-all duration-300 cursor-pointer group">
+                  <div className="w-full h-32 mb-3 rounded-xl overflow-hidden shrink-0 bg-gray-50 relative">
+                    <div className="absolute inset-0 bg-gray-900/0 group-hover:bg-gray-900/10 transition-colors z-10"></div>
+                    <img src={item.images?.[0] || `https://picsum.photos/seed/${item._id}/400/300`} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                   </div>
                   <div className="flex justify-between items-start mb-2">
                     <span className="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">Trending</span>
@@ -320,9 +341,10 @@ const Storefront = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {filteredAndSortedItems.map(item => (
-            <div key={item._id} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col hover:shadow-md transition-shadow">
-              <div className="w-full h-40 mb-4 rounded-xl overflow-hidden bg-gray-100 shrink-0">
-                <img src={item.images?.[0] || `https://picsum.photos/seed/${item._id}/400/300`} alt={item.name} className="w-full h-full object-cover" />
+            <div key={item._id} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col hover:-translate-y-2 hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] hover:border-orange-200 transition-all duration-300 group cursor-pointer">
+              <div className="w-full h-40 mb-4 rounded-xl overflow-hidden bg-gray-50 shrink-0 relative">
+                <div className="absolute inset-0 bg-gray-900/0 group-hover:bg-gray-900/10 transition-colors z-10"></div>
+                <img src={item.images?.[0] || `https://picsum.photos/seed/${item._id}/400/300`} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
               </div>
               <div className="flex justify-between items-start mb-3">
                 <span className="bg-blue-50 text-blue-700 text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">{item.category}</span>
@@ -344,7 +366,7 @@ const Storefront = () => {
                   <span className="text-xl font-extrabold text-emerald-600">${item.price.toFixed(2)}</span>
                   {item.stock < 10 && <p className="text-[10px] text-red-500 font-bold">Only {item.stock} left!</p>}
                 </div>
-                <button onClick={() => addToCart(item)} disabled={item.stock === 0} className="bg-gray-900 hover:bg-gray-800 disabled:opacity-50 text-white font-semibold py-2 px-4 rounded-xl transition-colors">
+                <button onClick={() => addToCart(item)} disabled={item.stock === 0} className="bg-orange-500 hover:bg-orange-600 shadow-md shadow-orange-500/20 disabled:opacity-50 text-white font-semibold py-2 px-4 rounded-xl transition-colors">
                   {item.stock === 0 ? 'Out of Stock' : 'Add'}
                 </button>
               </div>
@@ -403,10 +425,15 @@ const Storefront = () => {
                           <h4 className="font-bold text-gray-900">{item.name}</h4>
                           <span className="text-emerald-600 font-medium">${item.price.toFixed(2)}</span>
                         </div>
-                        <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-2 py-1 text-gray-900">
-                          <button onClick={() => updateQuantity(item.menuItem, -1)} className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-lg text-gray-900 font-bold">-</button>
-                          <span className="w-4 text-center font-bold text-sm text-gray-900">{item.quantity}</span>
-                          <button onClick={() => updateQuantity(item.menuItem, 1)} className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-lg text-gray-900 font-bold">+</button>
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-2 py-1 text-gray-900 shadow-sm">
+                            <button onClick={() => item.quantity === 1 ? removeFromCart(item.menuItem) : updateQuantity(item.menuItem, -1)} className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-lg text-gray-900 font-bold">-</button>
+                            <span className="w-4 text-center font-bold text-sm text-gray-900">{item.quantity}</span>
+                            <button onClick={() => updateQuantity(item.menuItem, 1)} className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-lg text-gray-900 font-bold">+</button>
+                          </div>
+                          <button onClick={() => removeFromCart(item.menuItem)} className="w-10 h-10 flex items-center justify-center bg-gray-100 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-xl transition-colors">
+                            <Trash2 className="w-5 h-5" />
+                          </button>
                         </div>
                       </div>
                     ))
@@ -432,11 +459,21 @@ const Storefront = () => {
                     </div>
                     {appliedPromo && <p className="text-sm font-bold text-emerald-600 mb-4 px-1">{appliedPromo} applied!</p>}
 
-                    <div className="flex justify-between items-center mb-4 px-1">
-                      <span className="text-gray-500 text-lg">Total</span>
-                      <span className="text-2xl font-extrabold text-gray-900">
-                        ${appliedPromo === 'SAVE5' && totalCartValue > 5 ? (totalCartValue - 5).toFixed(2) : appliedPromo === 'FIRST10' ? (totalCartValue * 0.9).toFixed(2) : totalCartValue.toFixed(2)}
-                      </span>
+                    <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-6">
+                      <div className="flex justify-between items-center mb-2 px-1">
+                        <span className="text-sm text-gray-500 font-medium">Subtotal</span>
+                        <span className="text-sm font-bold text-gray-900">${totalCartValue.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between items-center mb-3 px-1">
+                        <span className="text-sm text-gray-500 font-medium">Taxes & Fees</span>
+                        <span className="text-sm font-bold text-gray-900">Calculated at checkout</span>
+                      </div>
+                      <div className="border-t border-gray-100 pt-3 flex justify-between items-center px-1">
+                        <span className="text-gray-900 font-bold text-lg">Total</span>
+                        <span className="text-3xl font-extrabold text-orange-600">
+                          ${appliedPromo === 'SAVE5' && totalCartValue > 5 ? (totalCartValue - 5).toFixed(2) : appliedPromo === 'FIRST10' ? (totalCartValue * 0.9).toFixed(2) : totalCartValue.toFixed(2)}
+                        </span>
+                      </div>
                     </div>
                     <button onClick={handleProceedToPayment}
                       className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-blue-600/30">

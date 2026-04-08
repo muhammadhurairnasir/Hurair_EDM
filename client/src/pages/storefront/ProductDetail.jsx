@@ -45,7 +45,33 @@ const ProductDetail = () => {
     }
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white">
+        <header className="border-b border-gray-100 py-4 px-6 fixed top-0 w-full bg-white z-40">
+          <div className="w-32 h-6 bg-gray-200 rounded-lg animate-pulse"></div>
+        </header>
+        <main className="max-w-6xl mx-auto px-6 pt-24 pb-12">
+          <div className="flex flex-col lg:flex-row gap-16">
+            <div className="lg:w-1/2">
+              <div className="w-full h-[500px] bg-gray-100 rounded-3xl animate-pulse mb-4"></div>
+              <div className="flex gap-4">
+                <div className="w-24 h-24 bg-gray-100 rounded-xl animate-pulse"></div>
+                <div className="w-24 h-24 bg-gray-100 rounded-xl animate-pulse"></div>
+              </div>
+            </div>
+            <div className="lg:w-1/2 space-y-6 pt-4">
+              <div className="w-3/4 h-12 bg-gray-100 rounded-xl animate-pulse"></div>
+              <div className="w-1/4 h-4 bg-gray-100 rounded-md animate-pulse"></div>
+              <div className="w-full h-32 bg-gray-50 rounded-xl animate-pulse mt-8"></div>
+              <div className="w-1/3 h-12 bg-gray-100 rounded-xl animate-pulse mt-8"></div>
+              <div className="w-full h-16 bg-gray-100 rounded-2xl animate-pulse mt-8"></div>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
   if (!product) return <div className="min-h-screen flex items-center justify-center">Product Not Found</div>;
 
   const images = (product.images && product.images.length > 0) ? product.images : [
@@ -73,8 +99,9 @@ const ProductDetail = () => {
           
           {/* Image Gallery */}
           <div className="lg:w-1/2">
-            <div className="bg-gray-50 rounded-3xl overflow-hidden mb-4 border border-gray-100">
-              <img src={images[activeImage]} alt={product.name} className="w-full h-[500px] object-cover" />
+            <div className="relative bg-gray-50 rounded-3xl overflow-hidden mb-4 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] group">
+              <div className="absolute inset-0 bg-gray-900/5 group-hover:bg-gray-900/0 transition-colors z-10"></div>
+              <img src={images[activeImage]} alt={product.name} className="w-full h-[500px] object-cover group-hover:scale-105 transition-transform duration-700" />
             </div>
             {images.length > 1 && (
               <div className="flex gap-4 overflow-x-auto pb-2">
@@ -114,9 +141,9 @@ const ProductDetail = () => {
               <button 
                 onClick={addToCart} 
                 disabled={product.stock === 0}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
+                className="flex-1 bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 disabled:opacity-50 text-white font-extrabold text-lg py-4 rounded-2xl transition-all shadow-xl shadow-orange-500/30 flex items-center justify-center gap-2 hover:-translate-y-1"
               >
-                <ShoppingBag className="w-5 h-5" />
+                <ShoppingBag className="w-6 h-6" />
                 {product.stock === 0 ? 'Out of Stock' : 'Add to Cart'}
               </button>
               <button className="w-14 h-14 rounded-2xl bg-gray-50 text-gray-400 hover:text-red-500 transition-colors flex flex-shrink-0 items-center justify-center border border-gray-200">
@@ -125,13 +152,13 @@ const ProductDetail = () => {
             </div>
 
             <div className="space-y-4">
-              <div className="flex items-center gap-3 text-gray-600 bg-gray-50 p-4 rounded-xl">
-                <Truck className="w-6 h-6 text-blue-500 flex-shrink-0" />
-                <p className="text-sm"><strong className="text-gray-900">Fast Delivery.</strong> Usually ships within 24 hours.</p>
+              <div className="flex items-center gap-3 text-orange-900 bg-gradient-to-r from-orange-50 to-orange-100/50 p-5 rounded-2xl border border-orange-100">
+                <Truck className="w-6 h-6 text-orange-500 flex-shrink-0" />
+                <p className="text-sm"><strong className="font-bold">Fast Delivery.</strong> Usually ships within 24 hours.</p>
               </div>
-              <div className="flex items-center gap-3 text-gray-600 bg-gray-50 p-4 rounded-xl">
+              <div className="flex items-center gap-3 text-emerald-900 bg-gradient-to-r from-emerald-50 to-emerald-100/50 p-5 rounded-2xl border border-emerald-100">
                 <ShieldCheck className="w-6 h-6 text-emerald-500 flex-shrink-0" />
-                <p className="text-sm"><strong className="text-gray-900">Secure Checkout.</strong> Your payment is encrypted.</p>
+                <p className="text-sm"><strong className="font-bold">Secure Checkout.</strong> Your payment is entirely encrypted.</p>
               </div>
             </div>
           </div>

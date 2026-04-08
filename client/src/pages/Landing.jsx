@@ -23,7 +23,7 @@ const Landing = () => {
       </Helmet>
 
       {/* Navigation */}
-      <nav className="border-b border-gray-800 bg-gray-900/80 backdrop-blur-lg fixed w-full top-0 z-50 transition-all">
+      <nav className="border-b border-gray-800/50 bg-gray-900/40 backdrop-blur-2xl fixed w-full top-0 z-50 transition-all">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
             <div className="flex items-center gap-3">
@@ -81,14 +81,19 @@ const Landing = () => {
       </div>
 
       {/* Trusted By / Social Proof */}
-      <div className="py-10 border-y border-gray-800 bg-gray-900/50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-sm font-medium text-gray-500 tracking-widest uppercase mb-8">Trusted by 500+ innovative restaurants</p>
-          <div className="flex flex-wrap justify-center items-center gap-12 md:gap-24 opacity-50 grayscale">
-            <h3 className="text-2xl font-bold font-serif">The Great Feast</h3>
-            <h3 className="text-2xl font-bold font-mono tracking-tighter">PIZZA.CO</h3>
-            <h3 className="text-2xl font-bold tracking-wide">BurgerJoint</h3>
-            <h3 className="text-2xl font-bold italic">Bistro Elegance</h3>
+      <div className="py-16 border-y border-gray-800/50 bg-gray-900 overflow-hidden relative">
+        <div className="absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-gray-900 to-transparent z-10 pointer-events-none"></div>
+        <div className="absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-gray-900 to-transparent z-10 pointer-events-none"></div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-20 mb-10">
+          <p className="text-sm font-bold text-gray-500 tracking-widest uppercase">Trusted by 500+ innovative restaurants globally</p>
+        </div>
+        <div className="flex justify-center transition-all duration-500">
+          <div className="flex flex-wrap justify-center items-center gap-12 md:gap-24 px-8 opacity-40 hover:opacity-100 transition-opacity duration-700">
+            <h3 className="text-2xl font-bold font-serif whitespace-nowrap hover:text-white transition-colors cursor-default">The Great Feast</h3>
+            <h3 className="text-2xl font-bold font-mono tracking-tighter hover:text-orange-400 transition-colors cursor-default">PIZZA.CO</h3>
+            <h3 className="text-2xl font-bold tracking-wide whitespace-nowrap hover:text-white transition-colors cursor-default">BurgerJoint</h3>
+            <h3 className="text-2xl font-bold italic hover:text-emerald-400 transition-colors cursor-default">Bistro Elegance</h3>
+            <h3 className="text-2xl font-bold font-serif whitespace-nowrap hover:text-rose-400 transition-colors cursor-default">Café Noir</h3>
           </div>
         </div>
       </div>

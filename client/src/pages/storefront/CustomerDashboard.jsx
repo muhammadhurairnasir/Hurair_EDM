@@ -14,6 +14,7 @@ const CustomerDashboard = () => {
   const [wishlist, setWishlist] = useState([]);
   const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'wishlist' | 'settings'
   const [formData, setFormData] = useState({ name: user?.name || '', email: user?.email || '', password: '' });
+  const [toast, setToast] = useState(null);
 
   useEffect(() => {
     if (!user || user.role !== 'customer') {
@@ -45,10 +46,12 @@ const CustomerDashboard = () => {
     e.preventDefault();
     try {
       await api.put('/customer/profile', formData);
-      alert('Profile updated successfully! Login again to see changes immediately.');
+      setToast({ type: 'success', text: 'Profile updated successfully!' });
+      setTimeout(() => setToast(null), 3500);
       setFormData({ ...formData, password: '' });
     } catch (error) {
-      alert('Failed to update profile');
+      setToast({ type: 'error', text: 'Failed to update profile.' });
+      setTimeout(() => setToast(null), 3500);
     }
   };
 
@@ -76,32 +79,34 @@ const CustomerDashboard = () => {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="mb-8">
-          <h1 className="text-3xl font-extrabold text-gray-900 mb-2">Hello, {user?.name}</h1>
-          <p className="text-gray-500">Track your orders and view your favorite items.</p>
+        <div className="mb-10 flex flex-col md:flex-row items-start md:items-center gap-6 bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
+          <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-rose-500 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-orange-500/30 shrink-0">
+            {user?.name?.charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <h1 className="text-3xl font-extrabold text-gray-900 mb-1 tracking-tight">Welcome back, {user?.name}</h1>
+            <p className="text-gray-500 font-medium">Manage your recent orders, favorite dishes, and account preferences.</p>
+          </div>
         </div>
 
-        <div className="flex border-b border-gray-200 mb-8 space-x-8">
+        <div className="flex bg-gray-100/50 p-1.5 rounded-xl w-max mb-8 border border-gray-200/50">
           <button 
-            className={`pb-4 text-sm font-bold tracking-wide transition-colors relative ${activeTab === 'orders' ? 'text-blue-600' : 'text-gray-500 hover:text-gray-800'}`}
+            className={`px-6 py-2.5 text-sm font-bold rounded-lg transition-all ${activeTab === 'orders' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100/50'}`}
             onClick={() => setActiveTab('orders')}
           >
-            ORDER HISTORY
-            {activeTab === 'orders' && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600"></span>}
+            Order History
           </button>
           <button 
-            className={`pb-4 text-sm font-bold tracking-wide transition-colors relative ${activeTab === 'wishlist' ? 'text-blue-600' : 'text-gray-500 hover:text-gray-800'}`}
+            className={`px-6 py-2.5 text-sm font-bold rounded-lg transition-all ${activeTab === 'wishlist' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100/50'}`}
             onClick={() => setActiveTab('wishlist')}
           >
-            SAVED ITEMS
-            {activeTab === 'wishlist' && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600"></span>}
+            Saved Items
           </button>
           <button 
-            className={`pb-4 text-sm font-bold tracking-wide transition-colors relative ${activeTab === 'settings' ? 'text-blue-600' : 'text-gray-500 hover:text-gray-800'}`}
+            className={`px-6 py-2.5 text-sm font-bold rounded-lg transition-all ${activeTab === 'settings' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100/50'}`}
             onClick={() => setActiveTab('settings')}
           >
-            SETTINGS
-            {activeTab === 'settings' && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600"></span>}
+            Settings
           </button>
         </div>
 
@@ -116,22 +121,23 @@ const CustomerDashboard = () => {
               </div>
             ) : (
               orders.map(order => (
-                <div key={order._id} className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm flex flex-col md:flex-row gap-6 justify-between items-start md:items-center">
+                <div key={order._id} className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all flex flex-col md:flex-row gap-6 justify-between items-start md:items-center">
                   <div>
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className="text-sm font-bold text-gray-500">Order #{order._id.slice(-6).toUpperCase()}</span>
-                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${getStatusColor(order.status)} flex items-center gap-1`}>
-                        {order.status === 'Completed' ? <CheckCircle2 className="w-3 h-3"/> : <Clock className="w-3 h-3"/>}
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="text-sm font-bold text-gray-400 font-mono bg-gray-50 px-2 py-0.5 rounded">#{order._id.slice(-8).toUpperCase()}</span>
+                      <span className={`text-xs font-extrabold px-3 py-1 rounded-full ${getStatusColor(order.status)} flex items-center gap-1`}>
+                        {order.status === 'Completed' ? <CheckCircle2 className="w-3.5 h-3.5"/> : <Clock className="w-3.5 h-3.5"/>}
                         {order.status}
                       </span>
                     </div>
-                    <ul className="text-gray-600 text-sm space-y-1">
-                      {order.items.map((item, idx) => <li key={idx}>{item.quantity}x {item.name}</li>)}
+                    <ul className="text-gray-700 text-sm font-medium space-y-1.5 border-l-2 border-orange-100 pl-3">
+                      {order.items.map((item, idx) => <li key={idx}><span className="text-orange-500 font-bold">{item.quantity}x</span> {item.name}</li>)}
                     </ul>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm text-gray-500 mb-1">{new Date(order.createdAt).toLocaleDateString()}</p>
-                    <p className="text-xl font-extrabold text-gray-900">${order.totalAmount.toFixed(2)}</p>
+                  <div className="text-left md:text-right bg-gray-50 p-4 rounded-xl w-full md:w-auto">
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Total Paid</p>
+                    <p className="text-2xl font-extrabold text-gray-900">${order.totalAmount.toFixed(2)}</p>
+                    <p className="text-xs text-gray-500 mt-2">{new Date(order.createdAt).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric'})}</p>
                   </div>
                 </div>
               ))
@@ -147,15 +153,18 @@ const CustomerDashboard = () => {
               </div>
             ) : (
               wishlist.map(item => (
-                <div key={item._id} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col group">
+                <div key={item._id} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col hover:-translate-y-1 hover:shadow-lg hover:border-orange-200 transition-all group">
+                  <div className="w-full h-32 mb-4 rounded-xl overflow-hidden bg-gray-50 shrink-0 relative">
+                    <img src={item.images?.[0] || `https://picsum.photos/seed/${item._id}/400/300`} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                  </div>
                   <div className="flex justify-between items-start mb-3">
-                    <span className="bg-blue-50 text-blue-700 text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">{item.category}</span>
+                    <span className="bg-orange-50 text-orange-700 text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">{item.category}</span>
                     <Heart className="w-5 h-5 text-red-500 fill-current" />
                   </div>
-                  <h3 className="text-lg font-bold text-gray-900">{item.name}</h3>
-                  <p className="text-sm text-gray-500 mt-2 line-clamp-2 flex-grow">{item.description}</p>
+                  <h3 className="text-base font-bold text-gray-900 line-clamp-1">{item.name}</h3>
                   <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
-                    <span className="text-xl font-extrabold text-emerald-600">${item.price.toFixed(2)}</span>
+                    <span className="text-lg font-extrabold text-emerald-600">${item.price.toFixed(2)}</span>
+                    <Link to={`/store/${slug}/item/${item.seo?.slug || item._id}`} className="text-sm font-bold text-orange-600 hover:text-orange-700">View</Link>
                   </div>
                 </div>
               ))
@@ -184,6 +193,14 @@ const CustomerDashboard = () => {
           </div>
         ) : null}
       </main>
+      
+      {/* Premium Sliding Toast Notification */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 bg-gray-900 border border-gray-800 text-white px-6 py-4 rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.4)] flex items-center gap-3 z-50 animate-in fade-in slide-in-from-bottom-8 duration-500">
+          <CheckCircle2 className={`w-5 h-5 ${toast.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`} />
+          <span className="font-bold tracking-wide">{toast.text}</span>
+        </div>
+      )}
     </div>
   );
 };
