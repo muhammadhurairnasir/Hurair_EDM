@@ -6,7 +6,8 @@ import api from '../../services/api.js';
 import { useAuth } from '../../hooks/useAuth.js';
 
 const CustomerDashboard = () => {
-  const { slug } = useParams();
+  const urlSlug = useParams().slug;
+  const slug = urlSlug || 'resova';
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   
@@ -18,7 +19,7 @@ const CustomerDashboard = () => {
 
   useEffect(() => {
     if (!user || user.role !== 'customer') {
-      navigate(`/store/${slug}/login`);
+      navigate(`/customer/login`);
       return;
     }
     fetchCustomerData();
@@ -39,7 +40,7 @@ const CustomerDashboard = () => {
   
   const handleLogout = () => {
     logout();
-    navigate(`/store/${slug}`);
+    navigate(`/`);
   };
 
   const handleUpdateProfile = async (e) => {
@@ -56,9 +57,10 @@ const CustomerDashboard = () => {
   };
 
   const getStatusColor = (status) => {
-    if(status === 'Completed') return 'bg-emerald-100 text-emerald-700';
-    if(status === 'Preparing') return 'bg-blue-100 text-blue-700';
-    return 'bg-amber-100 text-amber-700';
+    if (status === 'delivered') return 'bg-emerald-100 text-emerald-700';
+    if (status === 'shipped') return 'bg-blue-100 text-blue-700';
+    if (status === 'cancelled') return 'bg-red-100 text-red-700';
+    return 'bg-amber-100 text-amber-700'; // pending
   };
 
   return (
@@ -69,7 +71,7 @@ const CustomerDashboard = () => {
 
       <header className="bg-white shadow-sm sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <Link to={`/store/${slug}`} className="text-gray-500 hover:text-gray-900 inline-flex items-center gap-2 font-medium">
+          <Link to={`/`} className="text-gray-500 hover:text-gray-900 inline-flex items-center gap-2 font-medium">
             <ArrowLeft className="w-4 h-4" /> Back to Store
           </Link>
           <button onClick={handleLogout} className="text-sm font-medium text-red-600 hover:text-red-700 transition-colors flex items-center gap-1">
@@ -117,7 +119,7 @@ const CustomerDashboard = () => {
                 <Package className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                 <h3 className="text-lg font-bold text-gray-900">No orders yet</h3>
                 <p className="text-gray-500 mt-1">When you place an order, it will appear here.</p>
-                <Link to={`/store/${slug}`} className="inline-block mt-6 text-blue-600 font-bold hover:underline">Start an order</Link>
+                <Link to={`/`} className="inline-block mt-6 text-blue-600 font-bold hover:underline">Start an order</Link>
               </div>
             ) : (
               orders.map(order => (
@@ -164,7 +166,7 @@ const CustomerDashboard = () => {
                   <h3 className="text-base font-bold text-gray-900 line-clamp-1">{item.name}</h3>
                   <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
                     <span className="text-lg font-extrabold text-emerald-600">${item.price.toFixed(2)}</span>
-                    <Link to={`/store/${slug}/item/${item.seo?.slug || item._id}`} className="text-sm font-bold text-orange-600 hover:text-orange-700">View</Link>
+                    <Link to={`/item/${item.seo?.slug || item._id}`} className="text-sm font-bold text-orange-600 hover:text-orange-700">View</Link>
                   </div>
                 </div>
               ))

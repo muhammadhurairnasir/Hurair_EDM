@@ -1,22 +1,44 @@
 import { useState, useRef, useEffect } from 'react';
 import { MessageSquare, X, Send, Bot, User, Loader2, Sparkles, ShoppingCart, Package, Tag, ChevronDown } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import api from '../../services/api.js';
-
-/** Renders **bold** markdown syntax inside chat bubbles */
+/** Renders **bold** markdown syntax and [Text](link) inside chat bubbles */
 const FormattedText = ({ text }) => {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  // Split by markdown links first [Text](url)
+  const linkParts = text.split(/(\[[^\]]+\]\([^)]+\))/g);
+
   return (
     <span>
-      {parts.map((part, i) =>
-        part.startsWith('**') && part.endsWith('**')
-          ? <strong key={i}>{part.slice(2, -2)}</strong>
-          : part.split('\n').map((line, j, arr) => (
-              <span key={`${i}-${j}`}>
-                {line}
-                {j < arr.length - 1 && <br />}
-              </span>
-            ))
-      )}
+      {linkParts.map((part, i) => {
+        if (!part) return null;
+        if (part.startsWith('[') && part.includes('](') && part.endsWith(')')) {
+          const m = part.match(/\[([^\]]+)\]\(([^)]+)\)/);
+          if (m) {
+            // Check if inside the link text it's bolded
+            const linkText = m[1];
+            const isBold = linkText.startsWith('**') && linkText.endsWith('**');
+            const display = isBold ? <strong>{linkText.slice(2, -2)}</strong> : linkText;
+            return <Link key={i} to={m[2]} className="text-blue-200 hover:text-white underline font-medium">{display}</Link>;
+          }
+        }
+
+        // Otherwise handle normal bolding
+        const boldParts = part.split(/(\*\*[^*]+\*\*)/g);
+        return (
+          <span key={i}>
+            {boldParts.map((subPart, j) =>
+              subPart.startsWith('**') && subPart.endsWith('**')
+                ? <strong key={j}>{subPart.slice(2, -2)}</strong>
+                : subPart.split('\n').map((line, k, arr) => (
+                  <span key={`${j}-${k}`}>
+                    {line}
+                    {k < arr.length - 1 && <br />}
+                  </span>
+                ))
+            )}
+          </span>
+        );
+      })}
     </span>
   );
 };
@@ -28,16 +50,26 @@ const QUICK_STARTS = [
   { label: 'Recommend something', icon: <Sparkles className="w-3 h-3" /> },
 ];
 
-export default function Chatbot({ restaurantId, customerId, cart = [], onAddToCart }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
-  const [messages, setMessages] = useState([
-    {
-      role: 'bot',
-      text: '👋 Hi! I\'m your **AI Store Assistant**.\n\nI can help you:\n• 🔍 Search & filter menu items\n• 📦 Track your orders\n• 🛒 Manage your cart\n• 🎟️ Find coupons & deals\n• ❓ Answer any FAQs\n\nWhat can I do for you today?',
-      suggestions: ['Show menu', 'Track my order', 'Any coupons?', 'Recommend something']
-    }
-  ]);
+export default function Chatbot({ restaurantId, customerId, cart = [], onAddToCart, onRemoveFromCart, onClearCart, onOpenCheckout, onApplyCoupon }) {
+  const [isOpen, setIsOpen] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem('chatbot_isOpen')) || false; } catch { return false; }
+  });
+  const [isMinimized, setIsMinimized] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem('chatbot_isMinimized')) || false; } catch { return false; }
+  });
+  const [messages, setMessages] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('chatbot_messages');
+      if (saved) return JSON.parse(saved);
+    } catch { }
+    return [
+      {
+        role: 'bot',
+        text: '👋 Hi! I\'m your **AI Store Assistant**.\n\nI can help you:\n• 🔍 Search & filter menu items\n• 📦 Track your orders\n• 🛒 Manage your cart\n• 🎟️ Find coupons & deals\n• ❓ Answer any FAQs\n\nWhat can I do for you today?',
+        suggestions: ['Show menu', 'Track my order', 'Any coupons?', 'Recommend something']
+      }
+    ];
+  });
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -45,6 +77,15 @@ export default function Chatbot({ restaurantId, customerId, cart = [], onAddToCa
   const inputRef = useRef(null);
 
   useEffect(() => {
+    sessionStorage.setItem('chatbot_isOpen', JSON.stringify(isOpen));
+  }, [isOpen]);
+
+  useEffect(() => {
+    sessionStorage.setItem('chatbot_isMinimized', JSON.stringify(isMinimized));
+  }, [isMinimized]);
+
+  useEffect(() => {
+    sessionStorage.setItem('chatbot_messages', JSON.stringify(messages));
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
@@ -70,18 +111,40 @@ export default function Chatbot({ restaurantId, customerId, cart = [], onAddToCa
         customerId,
         cart  // pass cart for abandoned cart detection
       });
-        const botMsg = {
+      const botMsg = {
         role: 'bot',
         text: data.data.reply,
         suggestions: data.data.suggestions || []
       };
-      
-      // NEW: Handle direct actions (like Add to Cart)
-      if (data.data.action?.type === 'ADD_TO_CART') {
-        onAddToCart(data.data.action.item);
-      }
-      
-      setMessages(prev => [...prev, botMsg]);
+
+      setMessages(prev => {
+        const newMessages = [...prev, botMsg];
+        sessionStorage.setItem('chatbot_messages', JSON.stringify(newMessages));
+        return newMessages;
+      });
+
+      // Handle direct cart actions (supports single or array of actions)
+      const actions = data.data.actions || (data.data.action ? [data.data.action] : []);
+      actions.forEach(act => {
+        if (act.type === 'ADD_TO_CART') {
+          onAddToCart?.(act.item, act.quantity || 1);
+        }
+        if (act.type === 'REMOVE_FROM_CART') {
+          onRemoveFromCart?.(act.itemId);
+        }
+        if (act.type === 'CLEAR_CART') {
+          onClearCart?.();
+        }
+        if (act.type === 'OPEN_CHECKOUT') {
+          setIsOpen(false);
+          sessionStorage.setItem('chatbot_isOpen', JSON.stringify(false));
+          onOpenCheckout?.();
+        }
+        if (act.type === 'APPLY_COUPON') {
+          onApplyCoupon?.(act.coupon);
+        }
+      });
+
       if (!isOpen) setUnreadCount(prev => prev + 1);
     } catch {
       setMessages(prev => [...prev, {
@@ -184,11 +247,10 @@ export default function Chatbot({ restaurantId, customerId, cart = [], onAddToCa
                           <Bot className="w-4 h-4 text-blue-600" />
                         </div>
                       )}
-                      <div className={`max-w-[82%] rounded-2xl px-4 py-3 shadow-sm ${
-                        msg.role === 'user'
+                      <div className={`max-w-[82%] rounded-2xl px-4 py-3 shadow-sm ${msg.role === 'user'
                           ? 'bg-blue-600 text-white rounded-br-none'
                           : 'bg-white text-gray-800 border border-gray-100 rounded-bl-none'
-                      }`}>
+                        }`}>
                         <p className="leading-relaxed text-[13px]">
                           <FormattedText text={msg.text} />
                         </p>
@@ -203,15 +265,32 @@ export default function Chatbot({ restaurantId, customerId, cart = [], onAddToCa
                     {/* Quick Reply Chips after bot message */}
                     {msg.role === 'bot' && msg.suggestions?.length > 0 && idx === messages.length - 1 && (
                       <div className="flex flex-wrap gap-1.5 mt-2 ml-9">
-                        {msg.suggestions.map(s => (
-                          <button
-                            key={s}
-                            onClick={() => handleChip(s)}
-                            className="text-xs bg-blue-50 border border-blue-200 text-blue-700 font-medium px-3 py-1 rounded-full hover:bg-blue-100 transition-colors"
-                          >
-                            {s}
-                          </button>
-                        ))}
+                        {msg.suggestions.map(s => {
+                          const isRemove = /^remove\b/i.test(s);
+                          const isAdd = /^add\b/i.test(s);
+                          const isClear = /^clear\b/i.test(s);
+                          const isAction = /^(checkout|pay|apply)/i.test(s);
+                          const isMenu = /^(show menu|view cart)/i.test(s);
+                          const chipClass = isRemove
+                            ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
+                            : isAdd
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+                              : isAction || isClear
+                                ? 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
+                                : isMenu
+                                  ? 'bg-violet-50 border-violet-200 text-violet-700 hover:bg-violet-100'
+                                  : 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100';
+                          const icon = isRemove ? '🗑️ ' : isAdd ? '🛒 ' : isAction ? '⚡ ' : isClear ? '🧨 ' : isMenu ? '📖 ' : '';
+                          return (
+                            <button
+                              key={s}
+                              onClick={() => handleChip(s)}
+                              className={`text-xs border font-medium px-3 py-1 rounded-full transition-colors ${chipClass}`}
+                            >
+                              {icon}{s}
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

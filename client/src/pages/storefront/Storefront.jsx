@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { ShoppingBag, X, CheckCircle2, Heart, UserCircle, ArrowLeft, Sparkles, Search, Trash2 } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
@@ -12,9 +12,11 @@ import Chatbot from '../../components/storefront/Chatbot.jsx';
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 
 const Storefront = () => {
-  const { slug } = useParams();
+  const urlSlug = useParams().slug;
+  const slug = urlSlug || 'resova';
   const [restaurantId, setRestaurantId] = useState(null);
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
@@ -32,6 +34,7 @@ const Storefront = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [promoCode, setPromoCode] = useState('');
   const [appliedPromo, setAppliedPromo] = useState('');
+  const [discountInfo, setDiscountInfo] = useState(null);
   const [activeCategory, setActiveCategory] = useState('All');
   const [sortOption, setSortOption] = useState('default');
 
@@ -55,6 +58,14 @@ const Storefront = () => {
   }, [slug]);
 
   useEffect(() => {
+    if (location.state?.openCart) {
+      setCheckoutStep('cart');
+      setIsCartOpen(true);
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state, navigate, location.pathname]);
+
+  useEffect(() => {
     if (slug) localStorage.setItem(`cart_${slug}`, JSON.stringify(cart));
   }, [cart, slug]);
 
@@ -67,14 +78,8 @@ const Storefront = () => {
 
   const resolveSlug = async () => {
     try {
-      const { data } = await api.get(`/menu/public/store/resolve/${slug}`);
+      const { data } = await api.get(`/products/public/store/resolve/${slug}`);
       if (data.data) {
-        // Enforce canonical SEO URLs: If loaded via _id, redirect instantly
-        if (data.data.seo?.slug && data.data.seo.slug !== slug) {
-          navigate(`/store/${data.data.seo.slug}`, { replace: true });
-          return;
-        }
-
         setRestaurantId(data.data._id);
         if(data.data.seo?.title) {
           setSeoConfig({ title: data.data.seo.title, description: data.data.seo.description });
@@ -88,7 +93,7 @@ const Storefront = () => {
 
   const fetchPublicMenu = async () => {
     try {
-      const { data } = await api.get(`/menu/public/${restaurantId}`);
+      const { data } = await api.get(`/products/public/${restaurantId}`);
       if (data.data) {
         setItems(data.data.filter(item => item.availability));
         if (data.data[0]?.seo?.title) {
@@ -117,39 +122,58 @@ const Storefront = () => {
   };
 
   const toggleWishlist = async (itemId) => {
-    if (!user || user.role !== 'customer') { navigate(`/store/${slug}/login`); return; }
+    if (!user || user.role !== 'customer') { navigate(`/customer/login`); return; }
     try {
-      await api.post('/customer/wishlist', { menuItemId: itemId });
+      await api.post('/customer/wishlist', { productId: itemId });
       setWishlist(prev => prev.includes(itemId) ? prev.filter(id => id !== itemId) : [...prev, itemId]);
     } catch (error) { console.error(error); }
   };
 
-  const addToCart = (item) => {
+  const addToCart = (item, quantityToAdd = 1) => {
     setCart(prev => {
-      const existing = prev.find(i => i.menuItem === item._id);
-      if (existing) return prev.map(i => i.menuItem === item._id ? { ...i, quantity: i.quantity + 1 } : i);
-      return [...prev, { menuItem: item._id, name: item.name, price: item.price, quantity: 1 }];
+      const existing = prev.find(i => i.product === item._id);
+      if (existing) return prev.map(i => i.product === item._id ? { ...i, quantity: i.quantity + quantityToAdd } : i);
+      return [...prev, { product: item._id, name: item.name, price: item.price, quantity: quantityToAdd }];
     });
     setIsCartOpen(true);
   };
 
   const updateQuantity = (itemId, change) => {
     setCart(prev => prev.map(i => {
-      if (i.menuItem === itemId) { const q = i.quantity + change; return q > 0 ? { ...i, quantity: q } : i; }
+      if (i.product === itemId) { const q = i.quantity + change; return q > 0 ? { ...i, quantity: q } : i; }
       return i;
     }));
   };
 
   const removeFromCart = (itemId) => {
-    setCart(prev => prev.filter(i => i.menuItem !== itemId));
+    setCart(prev => prev.filter(i => i.product !== itemId && i._id !== itemId));
   };
 
+  const clearCart = () => {
+    setCart([]);
+  };
+
+  // Centralized math
+  const subtotal = cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  let finalCartTotal = subtotal;
+  if (discountInfo) {
+    if (discountInfo.type === 'percentage') {
+      finalCartTotal = subtotal - (subtotal * discountInfo.value / 100);
+    } else {
+      finalCartTotal = Math.max(0, subtotal - discountInfo.value);
+    }
+  }
+
   const handleProceedToPayment = async () => {
-    if (!user) { navigate(`/store/${slug}/login`); return; }
-    if (totalCartValue < 0.50) { alert('Minimum order is $0.50'); return; }
+    if (!user) { navigate(`/customer/login`); return; }
+    if (finalCartTotal < 0.50) { alert('Minimum order is $0.50'); return; }
 
     try {
-      const { data } = await api.post('/payments/create-payment-intent', { amount: totalCartValue, promoCode: appliedPromo });
+      const { data } = await api.post('/payments/create-payment-intent', {
+        amount: subtotal,
+        promoCode: appliedPromo,
+        restaurantId
+      });
       setClientSecret(data.data.clientSecret);
       setCheckoutStep('payment');
     } catch (error) {
@@ -158,24 +182,34 @@ const Storefront = () => {
     }
   };
 
-  const handleApplyPromo = () => {
+  const handleApplyPromo = async () => {
     const code = promoCode.trim().toUpperCase();
-    if (code === 'SAVE5' || code === 'FIRST10') {
-      setAppliedPromo(code);
-    } else {
-      alert('Invalid Promo Code');
+    if (!code) return;
+    try {
+      const { data } = await api.post(`/coupons/public/verify/${restaurantId}`, {
+        code,
+        cartTotal: subtotal
+      });
+      if (data.success) {
+        setAppliedPromo(code);
+        setDiscountInfo({ type: data.data.discountType, value: data.data.discountValue });
+        alert(`✅ Coupon "${code}" applied! ${data.data.discountType === 'percentage' ? data.data.discountValue + '% off' : '$' + data.data.discountValue + ' off'}`);
+      }
+    } catch (error) {
+      alert(error?.response?.data?.message || 'Invalid or expired coupon code');
     }
   };
 
   const handlePaymentSuccess = async () => {
     // After Stripe payment confirmed, save the order
     try {
-      const totalAmount = cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
-      const payload = { restaurantId, items: cart, totalAmount, status: 'Pending' };
+      const payload = { restaurantId, items: cart, totalAmount: finalCartTotal, status: 'pending' };
       if (user?.role === 'customer') payload.customerId = user._id;
       await api.post('/orders/public', payload);
     } catch (e) { console.error(e); }
     setCart([]);
+    setAppliedPromo('');
+    setDiscountInfo(null);
     setCheckoutStep('success');
     setTimeout(() => { setCheckoutStep('cart'); setIsCartOpen(false); }, 4000);
   };
@@ -202,6 +236,10 @@ const Storefront = () => {
       <Helmet>
         <title>{seoConfig.title}</title>
         <meta name="description" content={seoConfig.description} />
+        <meta property="og:title" content={seoConfig.title} />
+        <meta property="og:description" content={seoConfig.description} />
+        <meta property="og:type" content="website" />
+        <meta property="og:image" content="https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&q=80&w=1200" />
       </Helmet>
 
       {/* Header */}
@@ -210,11 +248,11 @@ const Storefront = () => {
           <Link to="/" className="text-xl font-bold tracking-tight text-gray-900 border border-gray-200 px-3 py-1 rounded-lg">Restaurant Store</Link>
           <div className="flex items-center gap-6">
             {user?.role === 'customer' ? (
-              <Link to={`/store/${slug}/dashboard`} className="text-sm font-bold text-blue-600 hover:text-blue-700 transition-colors flex items-center gap-1">
+              <Link to={`/customer/dashboard`} className="text-sm font-bold text-blue-600 hover:text-blue-700 transition-colors flex items-center gap-1">
                 <UserCircle className="w-5 h-5" /> Dashboard
               </Link>
             ) : (
-              <Link to={`/store/${slug}/login`} className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">Sign In</Link>
+              <Link to={`/customer/login`} className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">Sign In</Link>
             )}
             <button onClick={() => { setIsCartOpen(true); setCheckoutStep('cart'); }}
               className="relative p-2 text-gray-600 hover:text-blue-600 transition-colors bg-gray-100 hover:bg-blue-50 rounded-full">
@@ -298,7 +336,7 @@ const Storefront = () => {
                     searchResults.map(result => (
                       <Link 
                         key={result._id} 
-                        to={`/store/${slug}/item/${result.seo?.slug || result._id}`}
+                        to={`/item/${result.seo?.slug || result._id}`}
                         className="flex items-center px-4 py-3 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
                       >
                         <div className="flex-1">
@@ -357,7 +395,7 @@ const Storefront = () => {
               <p className="text-sm text-gray-500 line-clamp-2 flex-grow mb-3">{item.description || 'No description available.'}</p>
               
               {/* Product Page Link */}
-              <Link to={`/store/${slug}/item/${item.seo?.slug || item._id}`} className="text-xs text-blue-600 font-bold hover:underline mb-3 inline-block">
+              <Link to={`/item/${item.seo?.slug || item._id}`} className="text-xs text-blue-600 font-bold hover:underline mb-3 inline-block">
                 View Full Details & Reviews &rarr;
               </Link>
               
@@ -420,18 +458,18 @@ const Storefront = () => {
                     </div>
                   ) : (
                     cart.map(item => (
-                      <div key={item.menuItem} className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                      <div key={item.product} className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl border border-gray-100">
                         <div className="flex flex-col flex-1 pl-3">
                           <h4 className="font-bold text-gray-900">{item.name}</h4>
                           <span className="text-emerald-600 font-medium">${item.price.toFixed(2)}</span>
                         </div>
                         <div className="flex items-center gap-3">
                           <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-2 py-1 text-gray-900 shadow-sm">
-                            <button onClick={() => item.quantity === 1 ? removeFromCart(item.menuItem) : updateQuantity(item.menuItem, -1)} className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-lg text-gray-900 font-bold">-</button>
+                            <button onClick={() => item.quantity === 1 ? removeFromCart(item.product) : updateQuantity(item.product, -1)} className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-lg text-gray-900 font-bold">-</button>
                             <span className="w-4 text-center font-bold text-sm text-gray-900">{item.quantity}</span>
-                            <button onClick={() => updateQuantity(item.menuItem, 1)} className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-lg text-gray-900 font-bold">+</button>
+                            <button onClick={() => updateQuantity(item.product, 1)} className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-lg text-gray-900 font-bold">+</button>
                           </div>
-                          <button onClick={() => removeFromCart(item.menuItem)} className="w-10 h-10 flex items-center justify-center bg-gray-100 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-xl transition-colors">
+                          <button onClick={() => removeFromCart(item.product)} className="w-10 h-10 flex items-center justify-center bg-gray-100 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-xl transition-colors">
                             <Trash2 className="w-5 h-5" />
                           </button>
                         </div>
@@ -451,7 +489,7 @@ const Storefront = () => {
                         disabled={!!appliedPromo}
                       />
                       <button 
-                        onClick={appliedPromo ? () => { setAppliedPromo(''); setPromoCode(''); } : handleApplyPromo}
+                        onClick={appliedPromo ? () => { setAppliedPromo(''); setPromoCode(''); setDiscountInfo(null); } : handleApplyPromo}
                         className={`px-4 py-2 text-sm font-bold rounded-xl transition-colors ${appliedPromo ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
                       >
                         {appliedPromo ? 'Remove' : 'Apply'}
@@ -462,8 +500,14 @@ const Storefront = () => {
                     <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-6">
                       <div className="flex justify-between items-center mb-2 px-1">
                         <span className="text-sm text-gray-500 font-medium">Subtotal</span>
-                        <span className="text-sm font-bold text-gray-900">${totalCartValue.toFixed(2)}</span>
+                        <span className="text-sm font-bold text-gray-900">${subtotal.toFixed(2)}</span>
                       </div>
+                      {appliedPromo && discountInfo && (
+                        <div className="flex justify-between items-center mb-2 px-1 text-emerald-600">
+                          <span className="text-sm font-medium">Discount ({appliedPromo})</span>
+                          <span className="text-sm font-bold">- ${(subtotal - finalCartTotal).toFixed(2)}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between items-center mb-3 px-1">
                         <span className="text-sm text-gray-500 font-medium">Taxes & Fees</span>
                         <span className="text-sm font-bold text-gray-900">Calculated at checkout</span>
@@ -471,7 +515,7 @@ const Storefront = () => {
                       <div className="border-t border-gray-100 pt-3 flex justify-between items-center px-1">
                         <span className="text-gray-900 font-bold text-lg">Total</span>
                         <span className="text-3xl font-extrabold text-orange-600">
-                          ${appliedPromo === 'SAVE5' && totalCartValue > 5 ? (totalCartValue - 5).toFixed(2) : appliedPromo === 'FIRST10' ? (totalCartValue * 0.9).toFixed(2) : totalCartValue.toFixed(2)}
+                          ${finalCartTotal.toFixed(2)}
                         </span>
                       </div>
                     </div>
@@ -489,7 +533,7 @@ const Storefront = () => {
               <div className="flex-1 overflow-y-auto p-6">
                 <div className="mb-4 flex justify-between text-sm text-gray-500">
                   <span>Order Total</span>
-                  <span className="font-bold text-gray-900">${totalCartValue.toFixed(2)}</span>
+                  <span className="font-bold text-gray-900">${finalCartTotal.toFixed(2)}</span>
                 </div>
                 <Elements stripe={stripePromise} options={stripeOptions}>
                   <StripeCheckoutForm clientSecret={clientSecret} onSuccess={handlePaymentSuccess} />
@@ -505,7 +549,14 @@ const Storefront = () => {
         restaurantId={restaurantId} 
         customerId={user?._id} 
         cart={cart} 
-        onAddToCart={addToCart} 
+        onAddToCart={addToCart}
+        onRemoveFromCart={removeFromCart}
+        onClearCart={clearCart}
+        onApplyCoupon={(coupon) => {
+          setAppliedPromo(coupon.code);
+          setDiscountInfo({ type: coupon.discountType, value: coupon.discountValue });
+        }}
+        onOpenCheckout={() => { setCheckoutStep('cart'); setIsCartOpen(true); }}
       />
     </div>
   );

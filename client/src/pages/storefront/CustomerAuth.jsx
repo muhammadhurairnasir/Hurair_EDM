@@ -5,7 +5,8 @@ import api from '../../services/api.js';
 import { UtensilsCrossed, ArrowLeft } from 'lucide-react';
 
 const CustomerAuth = () => {
-  const { slug } = useParams();
+  const urlSlug = useParams().slug;
+  const slug = urlSlug || 'resova';
   const navigate = useNavigate();
   const { login } = useAuth();
   
@@ -21,11 +22,11 @@ const CustomerAuth = () => {
     try {
       if (isLogin) {
         await login(formData.email, formData.password);
-        navigate(`/store/${slug}`);
+        navigate(`/`);
       } else {
         const { data } = await api.post('/auth/register-customer', formData);
         localStorage.setItem('user', JSON.stringify(data.data)); // FIX: Store under 'user' key so API interceptor and AuthContext load it.
-        window.location.href = `/store/${slug}`;
+        window.location.href = `/`;
       }
     } catch (err) {
       setError(err.response?.data?.message || 'Authentication failed');
@@ -37,7 +38,7 @@ const CustomerAuth = () => {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 text-gray-900">
       <div className="w-full max-w-md bg-white p-8 rounded-3xl border border-gray-100 shadow-xl">
-        <Link to={`/store/${slug}`} className="text-sm text-gray-500 hover:text-gray-900 inline-flex items-center gap-1 mb-6">
+        <Link to={`/`} className="text-sm text-gray-500 hover:text-gray-900 inline-flex items-center gap-1 mb-6">
           <ArrowLeft className="w-4 h-4" /> Back to Store
         </Link>
         <div className="flex flex-col items-center mb-8">

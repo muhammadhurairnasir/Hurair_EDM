@@ -1,30 +1,47 @@
 import Stripe from 'stripe';
+import Coupon from '../models/Coupon.model.js';
 import { successResponse, errorResponse } from '../utils/responseHandler.js';
 
 // Creates a PaymentIntent and returns the client_secret to the frontend
 export const createPaymentIntent = async (req, res) => {
   try {
-    let { amount, promoCode } = req.body; // amount in dollars (e.g. 29.99)
+    let { amount, promoCode, restaurantId } = req.body;
 
     if (!amount || amount <= 0) {
       return errorResponse(res, 400, 'Invalid amount');
     }
 
-    // Mathematical Promo Reducer
-    if (promoCode) {
-      const code = promoCode.toUpperCase();
-      if (code === 'SAVE5' && amount > 5) {
-        amount -= 5;
-      } else if (code === 'FIRST10') {
-        amount = amount * 0.9;
+    // Dynamic Coupon lookup from database
+    if (promoCode && restaurantId) {
+      const coupon = await Coupon.findOne({
+        code: promoCode.toUpperCase(),
+        restaurantId,
+        isActive: true,
+        validFrom: { $lte: new Date() },
+        validUntil: { $gte: new Date() }
+      });
+
+      if (coupon) {
+        // Check usage limit
+        if (!coupon.usageLimit || coupon.usageCount < coupon.usageLimit) {
+          if (amount >= coupon.minOrderValue) {
+            if (coupon.discountType === 'percentage') {
+              const discount = amount * (coupon.discountValue / 100);
+              amount -= coupon.maxDiscount ? Math.min(discount, coupon.maxDiscount) : discount;
+            } else {
+              amount = Math.max(0, amount - coupon.discountValue);
+            }
+            // Increment usage count
+            await Coupon.findByIdAndUpdate(coupon._id, { $inc: { usageCount: 1 } });
+          }
+        }
       }
     }
 
-    // Initialize Stripe lazily so dotenv has already loaded the key
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(amount * 100), // Stripe requires cents
+      amount: Math.round(amount * 100),
       currency: 'usd',
       automatic_payment_methods: { enabled: true },
     });
@@ -36,6 +53,7 @@ export const createPaymentIntent = async (req, res) => {
     errorResponse(res, 500, error.message);
   }
 };
+
 
 // Creates a PaymentIntent for B2B SaaS Upgrades
 export const createSaaSPaymentIntent = async (req, res) => {

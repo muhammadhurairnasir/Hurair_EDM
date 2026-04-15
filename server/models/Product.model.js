@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-const menuItemSchema = new mongoose.Schema({
+const productSchema = new mongoose.Schema({
   restaurantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Restaurant', required: true },
   name: { type: String, required: true },
   price: { type: Number, required: true },
@@ -15,8 +15,15 @@ const menuItemSchema = new mongoose.Schema({
     description: { type: String },
     keywords: { type: [String] },
     slug: { type: String }
-  }
+  },
+  rating: { type: Number, default: 4.5 },
+  numReviews: { type: Number, default: 0 }
 }, { timestamps: true });
 
-const MenuItem = mongoose.model('MenuItem', menuItemSchema);
-export default MenuItem;
+// Performance indexes for heavily queried fields
+productSchema.index({ restaurantId: 1, availability: 1 });
+productSchema.index({ 'seo.slug': 1 });
+productSchema.index({ restaurantId: 1, category: 1 });
+
+const Product = mongoose.model('Product', productSchema);
+export default Product;

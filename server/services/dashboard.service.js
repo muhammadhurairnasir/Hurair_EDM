@@ -1,5 +1,5 @@
 import Order from '../models/Order.model.js';
-import MenuItem from '../models/MenuItem.model.js';
+import Product from '../models/Product.model.js';
 import Table from '../models/Table.model.js';
 
 export const getDashboardStats = async (restaurantId) => {
@@ -17,8 +17,8 @@ export const getDashboardStats = async (restaurantId) => {
   ]);
   const totalRevenue = revenueAggregation.length > 0 ? revenueAggregation[0].total : 0;
 
-  const totalMenuItems = await MenuItem.countDocuments({ restaurantId });
+  const totalProducts = await Product.countDocuments({ restaurantId });
   const activeTables = await Table.countDocuments({ restaurantId, status: 'occupied' });
 
-  return { ordersToday, totalRevenue, totalMenuItems, activeTables };
+  return { ordersToday, totalRevenue, totalProducts, activeTables };
 };

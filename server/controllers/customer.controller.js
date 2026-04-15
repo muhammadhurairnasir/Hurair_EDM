@@ -1,17 +1,18 @@
 import User from '../models/User.model.js';
 import Order from '../models/Order.model.js';
+import Review from '../models/Review.model.js';
 import { successResponse, errorResponse } from '../utils/responseHandler.js';
 
 export const toggleWishlist = async (req, res) => {
   try {
-    const { menuItemId } = req.body;
+    const { productId } = req.body;
     const user = await User.findById(req.user._id);
     
     if (!user) return errorResponse(res, 404, 'User not found');
 
-    const index = user.wishlist.indexOf(menuItemId);
+    const index = user.wishlist.indexOf(productId);
     if (index === -1) {
-      user.wishlist.push(menuItemId);
+      user.wishlist.push(productId);
     } else {
       user.wishlist.splice(index, 1);
     }
@@ -67,6 +68,33 @@ export const updateCustomerProfile = async (req, res) => {
     // Return sanitized user
     const updatedUser = await User.findById(user._id).select('-password');
     successResponse(res, 200, 'Profile updated successfully', updatedUser);
+  } catch (error) {
+    errorResponse(res, 500, error.message);
+  }
+};
+export const submitReview = async (req, res) => {
+  try {
+    const { productId, restaurantId, rating, comment } = req.body;
+    if (!productId || !restaurantId || !rating || !comment) {
+      return errorResponse(res, 400, 'All fields are required');
+    }
+    // Prevent duplicate review
+    const existing = await Review.findOne({ productId, customerId: req.user._id });
+    if (existing) {
+      existing.rating = rating;
+      existing.comment = comment;
+      await existing.save();
+      return successResponse(res, 200, 'Review updated', existing);
+    }
+    const review = await Review.create({
+      productId,
+      restaurantId,
+      customerId: req.user._id,
+      rating,
+      comment
+    });
+    const populated = await Review.findById(review._id).populate('customerId', 'name');
+    successResponse(res, 201, 'Review submitted', populated);
   } catch (error) {
     errorResponse(res, 500, error.message);
   }

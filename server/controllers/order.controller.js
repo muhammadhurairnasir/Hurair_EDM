@@ -31,9 +31,9 @@ export const getOrders = async (req, res) => {
   }
 };
 
-export const updateOrderStatus = async (req, res) => {
+export const updateOrder = async (req, res) => {
   try {
-    const order = await orderService.updateOrderStatus(req.params.id, req.user.restaurantId, req.body.status);
+    const order = await orderService.updateOrder(req.params.id, req.user.restaurantId, req.body);
     if (!order) return errorResponse(res, 404, 'Order not found');
     successResponse(res, 200, 'Order updated', order);
   } catch (error) {

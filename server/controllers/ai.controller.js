@@ -1,296 +1,463 @@
 import { successResponse, errorResponse } from '../utils/responseHandler.js';
-import MenuItem from '../models/MenuItem.model.js';
+import Product from '../models/Product.model.js';
 import Order from '../models/Order.model.js';
+import Coupon from '../models/Coupon.model.js';
 import mongoose from 'mongoose';
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+// ─── 1. SYNONYMS & DICTIONARIES ────────────────────────────────────────────────
 
-/** Extract a dollar amount from natural language e.g. "under $20" → 20 */
+const SYNONYMS = {
+  burger: ['burger', 'hamburger', 'cheeseburger', 'slider', 'patty', 'whopper', 'smashburger', 'burgr', 'cheesesebaarger'],
+  pizza: ['pizza', 'slice', 'pie', 'margherita', 'pepperoni', 'crust', 'piza'],
+  fries: ['fries', 'fry', 'chips', 'potato', 'wedges', 'poutine'],
+  drink: ['drink', 'soda', 'pop', 'coke', 'beverage', 'water', 'juice', 'cola', 'pepsi', 'sprite'],
+  salad: ['salad', 'greens', 'lettuce', 'bowl', 'caesar'],
+  dessert: ['dessert', 'sweet', 'cake', 'ice cream', 'cookie', 'brownie', 'treat', 'shake'],
+  wrap: ['wrap', 'sandwich', 'sub', 'hoagie', 'burrito', 'shawarma', 'gyro'],
+
+  vegan: ['vegan', 'plant-based', 'dairy-free', 'no meat', 'meatless'],
+  vegetarian: ['vegetarian', 'veggie'],
+  gluten_free: ['gluten-free', 'gf', 'celiac', 'no wheat'],
+  halal: ['halal', 'zabiha'],
+};
+
+const FAQ_DATA = {
+  shipping: "🚚 **Shipping & Delivery:** We deliver across the city! Average delivery time is 30-45 minutes depending on traffic. Delivery is FREE for orders over $30.",
+  returns: "🔄 **Return Policy:** Orders can be cancelled before preparation starts for a full refund. If there is an issue with your food, please contact us within 1 hour for a replacement or refund.",
+  payment: "💳 **Payment Methods:** We accept all major credit cards via Stripe, Apple Pay, Google Pay, and Cash on Delivery.",
+  hours: "🕒 **Opening Hours:** We are open daily from 10:00 AM to 11:30 PM.",
+  contact: "📞 **Contact Us:** You can reach us at +1 (555) 012-3456 or email support@resova.com"
+};
+
+const WORD_NUMBERS = {
+  a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10
+};
+
+// ─── 2. UTILITY FUNCTIONS ──────────────────────────────────────────────────────
+
+const getEditDistance = (a, b) => {
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  const matrix = [];
+  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) matrix[i][j] = matrix[i - 1][j - 1];
+      else matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, Math.min(matrix[i][j - 1] + 1, matrix[i - 1][j] + 1));
+    }
+  }
+  return matrix[b.length][a.length];
+};
+
+const isFuzzyMatch = (query, targetPhrase) => {
+  const targetWords = targetPhrase.toLowerCase().split(/\s+/);
+  query = query.toLowerCase();
+  for (const tWord of targetWords) {
+    if (tWord === query) return true;
+    if (tWord.length > 4 && query.length > 4) {
+      if (tWord.includes(query) || query.includes(tWord)) return true;
+      if (getEditDistance(query, tWord) <= 2) return true;
+    }
+  }
+  return false;
+};
+
+const extractCategories = (text) => {
+  const found = new Set();
+  const lower = text.toLowerCase();
+  for (const [canon, syns] of Object.entries(SYNONYMS)) {
+    for (const syn of syns) {
+      // Match plural forms too (e.g. 'burgers', 'pizzas', 'fries')
+      if (new RegExp(`\\b${syn}s?\\b`).test(lower)) found.add(canon);
+    }
+  }
+  return Array.from(found);
+};
+
+const SKIP_WORDS = new Set([
+  'add', 'remove', 'delete', 'clear', 'empty', 'show', 'find', 'search', 'get', 'want', 'order', 'put',
+  'include', 'swap', 'instead', 'replace', 'change', 'take', 'without', 'checkout', 'pay', 'view',
+  'cart', 'my', 'me', 'the', 'a', 'an', 'some', 'any', 'and', 'or', 'please', 'now', 'just', 'all',
+  'have', 'do', 'what', 'where', 'how', 'is', 'are', 'can', 'could', 'would', 'should', 'track',
+  'status', 'delivery', 'where', 'popular', 'trending', 'best', 'recommend', 'suggest', 'cheap',
+  'budget', 'under', 'below', 'coupon', 'promo', 'deal', 'offer', 'code', 'discount', 'vegan', 'halal',
+  'stars', 'rating', 'rated', 'top', 'highly', 'better', 'shipping', 'return', 'refund', 'hours', 'pay'
+]);
+
+const extractTargetTokens = (text, allProducts) => {
+  const tokens = text.toLowerCase().match(/\w+/g) || [];
+  const targets = [];
+  let currentQty = 1;
+
+  for (let i = 0; i < tokens.length; i++) {
+    const word = tokens[i];
+    if (WORD_NUMBERS[word]) { currentQty = WORD_NUMBERS[word]; continue; }
+    if (!isNaN(parseInt(word))) { currentQty = parseInt(word); continue; }
+    if (SKIP_WORDS.has(word)) continue;
+
+    const twoWord = i < tokens.length - 1 ? `${word} ${tokens[i + 1]}` : null;
+    let matchedItem = null;
+    if (twoWord) matchedItem = allProducts.find(p => p.name.toLowerCase().includes(twoWord));
+    if (!matchedItem) matchedItem = allProducts.find(p => p.name.toLowerCase().includes(word));
+    if (!matchedItem && word.length > 4) matchedItem = allProducts.find(p => isFuzzyMatch(word, p.name));
+
+    let matchedCategory = null;
+    if (!matchedItem) matchedCategory = Object.keys(SYNONYMS).find(canon => SYNONYMS[canon].includes(word));
+
+    if (matchedItem) {
+      targets.push({ type: 'specific', product: matchedItem, quantity: currentQty });
+      if (twoWord && matchedItem.name.toLowerCase().includes(twoWord)) i++;
+      currentQty = 1;
+    } else if (matchedCategory) {
+      targets.push({ type: 'category', category: matchedCategory, quantity: currentQty });
+      currentQty = 1;
+    }
+  }
+  return targets;
+};
+
 const extractPrice = (text) => {
-  const match = text.match(/\$?(\d+(\.\d+)?)/);
-  return match ? parseFloat(match[1]) : null;
+  const match = text.match(/(?:under|below|less than|max|budget|\$)\s?(\d+(\.\d+)?)/);
+  if (match) return parseFloat(match[1]);
+  // Fallback for "15 dollars" or "for 15"
+  const alternative = text.match(/\b(?:for|under)\s(\d+)\b/);
+  return alternative ? parseFloat(alternative[1]) : null;
 };
 
-/** Extract a category keyword from the message */
-const extractCategory = (text) => {
-  const categories = ['burger', 'pizza', 'pasta', 'chicken', 'beef', 'fish', 'seafood',
-    'salad', 'dessert', 'drink', 'beverage', 'soup', 'sandwich', 'wrap',
-    'appetizer', 'steak', 'vegan', 'vegetarian', 'rice', 'noodle'];
-  return categories.find(cat => text.includes(cat)) || null;
+const extractRating = (text) => {
+  const match = text.match(/(\d)(\s?stars?| rating)/);
+  return match ? parseInt(match[1]) : null;
 };
 
-/** Format an order status into a visual timeline string */
+const extractBrand = (text, allProducts) => {
+  const brands = [...new Set(allProducts.map(p => p.brand?.toLowerCase()).filter(Boolean))];
+  const found = brands.find(b => text.toLowerCase().includes(b));
+  return found || null;
+};
+
 const buildOrderTimeline = (order) => {
-  const steps = ['Pending', 'Preparing', 'Ready', 'Delivered', 'Completed'];
+  const steps = ['pending', 'shipped', 'delivered', 'cancelled'];
   const currentIdx = steps.findIndex(s => s.toLowerCase() === order.status.toLowerCase());
-  return steps.map((step, i) => {
-    if (i < currentIdx) return `✅ ${step}`;
-    if (i === currentIdx) return `🔄 **${step}** ← You are here`;
-    return `⬜ ${step}`;
-  }).join('\n');
+  return steps.map((step, i) => i < currentIdx ? `✅ ${step}` : i === currentIdx ? `🔄 **${step}** ← You are here` : `⬜ ${step}`).join('\n');
 };
 
-/** Format a menu item list for chat */
-const formatItems = (items) =>
-  items.map(i => `• **${i.name}** — $${i.price.toFixed(2)} (${i.category})`).join('\n');
+const formatItems = (items) => items.map(i => `• **${i.name}** — $${i.price.toFixed(2)}${i.brand ? ` (${i.brand})` : ''}`).join('\n');
 
-// ─── Main Chat Handler ───────────────────────────────────────────────────────
+const getLiveCoupons = async (restaurantId) => {
+  try {
+    const now = new Date();
+    return await Coupon.find({ restaurantId, isActive: true, validFrom: { $lte: now }, validUntil: { $gte: now }, $or: [{ usageLimit: null }, { $expr: { $lt: ['$usageCount', '$usageLimit'] } }] }).limit(5);
+  } catch { return []; }
+};
+
+// ─── 3. MAIN CHAT HANDLER (NLP Router) ───────────────────────────────────────
 
 export const handleChat = async (req, res) => {
   try {
     const { message, restaurantId, customerId, cart = [] } = req.body;
     const lowerMsg = message.toLowerCase().trim();
     let reply = '';
-    let suggestions = []; // Quick-reply chips to send back
-    let action = null; // action for frontend to take
+    let suggestions = [];
+    let actions = [];
 
-    // ── 1. ORDER TRACKING ──────────────────────────────────────────────────
-    if (/order|track|where.*(my|is)|status|delivery status/.test(lowerMsg)) {
-      if (!customerId) {
-        reply = '🔐 Please **sign in** to track your orders. Guest orders can be tracked by telling me your order total.';
-        suggestions = ['Sign In', 'Browse Menu'];
-      } else {
-        const orders = await Order.find({ customerId, restaurantId })
-          .sort({ createdAt: -1 })
-          .limit(3);
+    const allProducts = await Product.find({ restaurantId, availability: true });
 
-        if (orders.length === 0) {
-          reply = "I couldn't find any orders linked to your account at this restaurant yet. Ready to place your first one?";
-          suggestions = ['Show Menu', 'Recommend something'];
-        } else {
-          const latest = orders[0];
-          const timeline = buildOrderTimeline(latest);
-          const itemsList = latest.items.map(i => `• ${i.name} x${i.quantity}`).join('\n');
-          reply = `📦 **Latest Order** — Total: $${latest.totalAmount.toFixed(2)}\n\n${timeline}\n\n**Items:**\n${itemsList}`;
-          if (orders.length > 1) {
-            reply += `\n\n_You have ${orders.length - 1} more past order(s). Want to see them?_`;
-            suggestions = ['Show all my orders', 'Reorder last order'];
+    // NLP intent flags
+    const isOrderTrack = /\b(track|where.*(my|is)|status|history|past|orders?|previous|shipped|package|what did i (buy|purchase|get)|ready)\b/.test(lowerMsg) && !/order.*pizza|order.*burger/.test(lowerMsg);
+    const isFAQ = /\b(shipping|delivery|deliver|arrive|eta|refund|return|policy|how.*pay|payment|pay |pay\?|hours|open|close|closing|when.*open|contact|phone|email|cash|card|stripe|apple|crypto|accepted)\b/.test(lowerMsg);
+    const isSearch = /show me|find|search|looking for|want|i need|do you have/.test(lowerMsg);
+    const isBudget = /under|below|less than|cheap|budget|affordable/.test(lowerMsg);
+    const isRemove = /\b(remove|delete|take out|without|no )\b/.test(lowerMsg);
+    const isClear = /clear.{0,5}cart|empty.{0,5}cart|wipe.{0,5}cart|reset.{0,5}cart/.test(lowerMsg);
+
+    const isCheckout = !isClear && (
+      /\b(checkout|pay now|pay for|view cart|order now|finish order)\b/.test(lowerMsg) ||
+      /open.*(cart|checkout|bag)|take me to (cart|checkout|payment|bag)|go to (cart|bag)|finish/.test(lowerMsg)
+    );
+    const isCoupon = /coupon|discount|promo|code|voucher|offer|deal|cheaper|save money|redeem|apply\s(save10|test1|flat5)/.test(lowerMsg);
+    const isTrending = /recommend|suggest|what.*good|popular|trending|best|favorite|special/.test(lowerMsg);
+    const isPairing = /also bought|goes.{0,8}with|pair|recommend with|similar/.test(lowerMsg);
+    const isRating = /top rated|highly rated|best rated|best reviewed|\d\s?stars?/.test(lowerMsg);
+    const isCheapest = /\b(cheapest|lowest price|least expensive)\b/.test(lowerMsg);
+    const isExpensive = /\b(most expensive|priciest|highest price)\b/.test(lowerMsg);
+
+    const targets = extractTargetTokens(lowerMsg, allProducts);
+    const priceLimit = extractPrice(lowerMsg);
+    const ratingLimitFromText = extractRating(lowerMsg);
+    const ratingLimit = ratingLimitFromText || (isRating ? 4 : null);
+    const brandTarget = extractBrand(lowerMsg, allProducts);
+    const extractedCategories = extractCategories(lowerMsg);
+
+    const isAdd = /\b(add|put|include|throw in|insert|toss|give me|buy a|buy some)\b/.test(lowerMsg);
+    const hasExplicitCartIntent = isAdd || isRemove;
+
+    const applyFilters = (baseProducts) => {
+      let f = [...baseProducts];
+      if (priceLimit) f = f.filter(p => p.price <= priceLimit);
+      if (ratingLimit) {
+        // Lenient threshold: "5 stars" matches top-tier (4.7+), "4 stars" matches 3.7+
+        const threshold = ratingLimit >= 5 ? 4.7 : ratingLimit - 0.3;
+        f = f.filter(p => (p.rating || 4.5) >= threshold);
+      }
+      if (brandTarget) f = f.filter(p => p.brand?.toLowerCase() === brandTarget);
+
+      const dietary = [];
+      if (SYNONYMS.vegan.some(s => lowerMsg.includes(s))) dietary.push('vegan', 'plant-based');
+      if (SYNONYMS.halal.some(s => lowerMsg.includes(s))) dietary.push('halal');
+      if (SYNONYMS.gluten_free.some(s => lowerMsg.includes(s))) dietary.push('gluten-free');
+      if (dietary.length > 0) f = f.filter(p => dietary.some(d => p.description?.toLowerCase().includes(d) || p.name.toLowerCase().includes(d)));
+      if (extractedCategories.length > 0) f = f.filter(p => extractedCategories.some(c => p.category.toLowerCase().includes(c) || p.name.toLowerCase().includes(c)));
+      return f;
+    };
+
+    // ── 1. COMPOUND CART ACTIONS ──────────────────────
+    if (targets.length > 0 && hasExplicitCartIntent) {
+      const added = [];
+      const removed = [];
+      targets.forEach((target) => {
+        let itemPos = -1;
+        
+        if (target.type === 'specific') {
+          // Identify EXACTLY where the item was matched in the string using synonyms
+          const words = target.product.name.toLowerCase().split(/\s+/);
+          const catSyns = SYNONYMS[target.product.category?.toLowerCase()] || [];
+          const searchTerms = [...new Set([...words, ...catSyns])];
+            
+          for (const term of searchTerms) {
+            const idx = lowerMsg.indexOf(term);
+            const isMatchLen = term.length > 2 || (term === 'id' || term === 'xl');
+            if (idx > -1 && isMatchLen) { itemPos = idx; break; }
           }
+            
+          if (itemPos > -1) {
+            // Find ALL indices of add and remove intents in the whole string
+            const addIdxs = [...lowerMsg.matchAll(/\b(add|put|include|throw in|give me|buy)\b/g)].map(m => m.index);
+            const removeIdxs = [...lowerMsg.matchAll(/\b(remove|delete|without|no\s|take out|instead of)\b/g)].map(m => m.index);
+            
+            let isRemoving = false;
+            
+            if (removeIdxs.length > 0) {
+              if (addIdxs.length === 0) {
+                 isRemoving = true;
+              } else {
+                 // Determine which intent verb is strictly geographically closer to the Item name
+                 const minRemoveDist = Math.min(...removeIdxs.map(i => Math.abs(i - itemPos)));
+                 const minAddDist = Math.min(...addIdxs.map(i => Math.abs(i - itemPos)));
+                 if (minRemoveDist < minAddDist) isRemoving = true;
+              }
+            }
+
+            if (isRemoving && !removed.find(r => r.itemId === target.product._id)) {
+              removed.push({ itemId: target.product._id, name: target.product.name, slug: target.product.seo?.slug || target.product._id });
+              actions.push({ type: 'REMOVE_FROM_CART', itemId: target.product._id });
+            } else if (!isRemoving && !added.find(a => a.item._id === target.product._id)) {
+              added.push({ item: target.product, quantity: target.quantity, slug: target.product.seo?.slug || target.product._id });
+              actions.push({ type: 'ADD_TO_CART', item: target.product, quantity: target.quantity });
+            }
+          }
+        }
+      });
+
+      if (added.length > 0 || removed.length > 0) {
+        let msg = '';
+        if (removed.length > 0) msg += `🗑️ Removed ${removed.map(r => `[**${r.name}**](/item/${r.slug})`).join(', ')}. `;
+        if (added.length > 0) msg += `🛒 Added ${added.map(a => `${a.quantity}x [**${a.item.name}**](/item/${a.slug})`).join(', ')}. `;
+        reply = msg;
+
+        // Context-aware suggestions based on what just happened
+        if (added.length > 0 && removed.length === 0) {
+          // Just added item(s) → offer to remove + go to cart/checkout
+          suggestions = [
+            ...added.slice(0, 2).map(a => `Remove ${a.item.name}`),
+            'View Cart',
+            'Show menu'
+          ];
+        } else if (removed.length > 0 && added.length === 0) {
+          // Just removed item(s) → offer to undo + explore more
+          suggestions = [
+            ...removed.slice(0, 2).map(r => `Add ${r.name}`),
+            'View Cart',
+            'Show menu'
+          ];
+        } else {
+          // Mixed add + remove → go to cart
+          suggestions = ['View Cart', 'Checkout', 'Recommend sides'];
         }
       }
     }
 
-    // ── 2. PRODUCT SEARCH: Under a price threshold ─────────────────────────
-    else if (/under|below|less than|cheap|budget|affordable/.test(lowerMsg)) {
-      const priceLimit = extractPrice(lowerMsg) || 15;
-      const category = extractCategory(lowerMsg);
-      const query = { restaurantId, availability: true, price: { $lte: priceLimit } };
-      if (category) query.category = { $regex: category, $options: 'i' };
+    if (isClear) {
+      actions.push({ type: 'CLEAR_CART' });
+      reply = (reply ? reply + '\n\n' : '') + `🗑️ Your cart has been cleared!`;
+      suggestions.push('Show menu', 'Recommend something');
+    }
 
-      const items = await MenuItem.find(query).sort({ price: 1 }).limit(5);
-      if (items.length > 0) {
-        reply = `🏷️ **Items under $${priceLimit}${category ? ` in "${category}"` : ''}:**\n\n${formatItems(items)}\n\nWant me to add any to your cart?`;
-        suggestions = items.slice(0, 3).map(i => `Add ${i.name}`);
+    if (isCheckout) {
+      actions.push({ type: 'OPEN_CHECKOUT' });
+      reply += (reply ? '\n\n' : '') + `💳 I've popped open your checkout drawer!`;
+      suggestions.push('Show menu', 'Clear my cart');
+    }
+
+    if (isFAQ) {
+      let faqReply = '';
+      if (lowerMsg.match(/shipping|delivery|deliver|arrive|eta/)) faqReply = FAQ_DATA.shipping;
+      else if (lowerMsg.match(/return|refund|policy/)) faqReply = FAQ_DATA.returns;
+      else if (lowerMsg.match(/pay|payment|cash|card|stripe|apple|crypto|accepted/)) faqReply = FAQ_DATA.payment;
+      else if (lowerMsg.match(/close|closing|hours|open|when.*open/)) faqReply = FAQ_DATA.hours;
+      else if (lowerMsg.match(/contact|phone|email/)) faqReply = FAQ_DATA.contact;
+
+      if (faqReply) {
+        reply += (reply ? '\n\n' : '') + faqReply;
+        suggestions.push('Checkout', 'View Cart');
+      }
+    } else if (targets.length === 0 && isAdd && !isClear && !isCheckout && !isOrderTrack) {
+      reply += (reply ? '\n\n' : '') + `🍽️ What would you like to add? Simply tell me the item name, or ask to "show the menu".`;
+      suggestions.push('Show menu');
+    } else if (targets.length === 0 && isRemove && !isClear && !isCheckout && !isOrderTrack) {
+      if (cart && cart.length > 0) {
+        reply += (reply ? '\n\n' : '') + `🍽️ What would you like to remove from your cart?`;
+        suggestions.push('Clear cart');
       } else {
-        reply = `Sorry, I couldn't find items under $${priceLimit}${category ? ` in "${category}"` : ''}. Want me to show all available items?`;
-        suggestions = ['Show all menu items'];
+        reply += (reply ? '\n\n' : '') + `🛒 Your cart is already empty! There's nothing to remove.`;
+        suggestions.push('Show menu', "What's trending?");
       }
     }
 
-    // ── 3. PRODUCT SEARCH: By category ────────────────────────────────────
-    else if (/show me|find|search|looking for|want|i need/.test(lowerMsg)) {
-      const category = extractCategory(lowerMsg);
-      const priceLimit = extractPrice(lowerMsg);
-      const query = { restaurantId, availability: true };
-      if (category) query.category = { $regex: category, $options: 'i' };
-      if (priceLimit) query.price = { $lte: priceLimit };
+    if (isOrderTrack) {
+      if (!customerId) {
+        reply += (reply ? '\n\n' : '') + '🔐 Please **sign in** to track your past orders.';
+        suggestions.push('Sign In', 'Browse Menu');
+      } else {
+        const isHistory = /\b(all|history|past|previous|orders|what did i (buy|purchase|get))\b/.test(lowerMsg);
+        const limit = isHistory ? 5 : 3;
+        const orders = await Order.find({ customerId, restaurantId }).sort({ createdAt: -1 }).limit(limit);
 
-      const items = await MenuItem.find(query).sort({ price: 1 }).limit(6);
-      if (items.length > 0) {
-        const label = category || 'available items';
+        if (orders.length === 0) reply += (reply ? '\n\n' : '') + "I couldn't find any past orders linked to your account yet.";
+        else if (isHistory && orders.length > 1) {
+          reply += (reply ? '\n\n' : '') + `📦 **Order History (Last ${orders.length}):**\n\n${orders.map(o => `• Order #${o._id.toString().slice(-4)} ($${o.totalAmount.toFixed(2)}) — **${o.status.toUpperCase()}**\n  *${o.items.map(i => `${i.quantity}x ${i.name}`).join(', ')}*`).join('\n\n')}`;
+          suggestions.push('Track latest order', 'Reorder favorites');
+        } else {
+          const latest = orders[0];
+          reply += (reply ? '\n\n' : '') + `📦 **Latest Order** — Total: $${latest.totalAmount.toFixed(2)}\n\n${buildOrderTimeline(latest)}\n\n**Items:**\n${latest.items.map(i => `• ${i.name} x${i.quantity}`).join('\n')}`;
+          suggestions.push('Show all my orders', 'Reorder last order');
+        }
+      }
+    }
+
+    if (isCoupon) {
+      const coupons = await getLiveCoupons(restaurantId);
+      const explicitCoupon = coupons.find(c => lowerMsg.includes(c.code.toLowerCase()));
+      if (explicitCoupon && /\b(apply|use|redeem)\b/.test(lowerMsg)) {
+        actions.push({ type: 'APPLY_COUPON', coupon: explicitCoupon });
+        reply += (reply ? '\n\n' : '') + `✨ Coupon **${explicitCoupon.code}** has been applied to your cart!`;
+      } else if (/\b(apply|use|redeem)\b/.test(lowerMsg) && !explicitCoupon) {
+        // User tried to apply a specific code that isn't valid/active
+        reply += (reply ? '\n\n' : '') + `❌ Sorry, that coupon code isn't valid or has expired. ${coupons.length > 0 ? `Try one of our active codes: **${coupons.map(c => c.code).join(', ')}**` : 'Check back soon for new promotions!'}`;
+      } else if (coupons.length > 0) {
+        reply += (reply ? '\n\n' : '') + `🎟️ **Active Coupon Codes:**\n\n${coupons.map(c => `• **${c.code}** — ${c.discountType === 'percentage' ? `${c.discountValue}% off` : `$${c.discountValue} off`}${c.minOrderValue > 0 ? ` (min $${c.minOrderValue})` : ''}`).join('\n')}\n\nSay "apply [code]" and I'll apply it instantly!`;
+        suggestions.push(...coupons.map(c => `Apply ${c.code}`));
+      } else {
+        reply += (reply ? '\n\n' : '') + `🎟️ No active promotions right now, but check back soon! We regularly offer discounts to our loyal customers.`;
+      }
+    }
+
+    if (isSearch || isBudget || isRating || extractedCategories.length > 0 || brandTarget || isCheapest || isExpensive) {
+      const formatItems = (items) => items.map(i => `• [**${i.name}**](/item/${i.seo?.slug || i._id}) — $${i.price.toFixed(2)}${i.brand ? ` (${i.brand})` : ''}`).join('\n');
+      let filtered = applyFilters(allProducts);
+      if (isExpensive) filtered = filtered.sort((a, b) => b.price - a.price);
+      else filtered = filtered.sort((a, b) => a.price - b.price); // default cheapest first
+
+      if (filtered.length > 0) {
+        if (isCheapest || isExpensive) filtered = filtered.slice(0, 1);
+        else filtered = filtered.slice(0, 15); // Show a healthy limit for the text
+        const catLabel = extractedCategories.length > 0 ? extractedCategories.join('/') : (isRating ? 'top-rated items' : 'items');
         const priceNote = priceLimit ? ` under $${priceLimit}` : '';
-        reply = `🍽️ **Here are ${label}${priceNote}:**\n\n${formatItems(items)}\n\nShall I add something to your cart?`;
-        suggestions = items.slice(0, 3).map(i => `Add ${i.name}`);
+        const ratingNote = ratingLimit ? ` with ${ratingLimit}+ stars` : '';
+        const brandNote = brandTarget ? ` from ${brandTarget}` : '';
+        const modeLabel = isExpensive ? 'most expensive ' : (isCheapest ? 'cheapest ' : '');
+        reply += (reply ? '\n\n' : '') + `🍽️ **Here is the ${modeLabel}${catLabel}${brandNote}${priceNote}${ratingNote}:**\n\n${formatItems(filtered)}\n\nShall I add ${filtered.length === 1 ? 'it' : 'any'} to your cart?`;
+        suggestions.push(...filtered.map(i => `Add ${i.name}`));
       } else {
-        reply = `I couldn't find what you're looking for. Let me show you our full menu — just say **"show menu"**!`;
-        suggestions = ['Show full menu', "What's popular?"];
+        const catNote = extractedCategories.length > 0 ? ` for ${extractedCategories.join('/')}` : '';
+        reply += (reply ? '\n\n' : '') + `I couldn't find any items matching those specific filters${catNote}. Want me to show our popular favorites instead?`;
+        suggestions.push("What's popular?", 'Show menu');
       }
     }
 
-    // ── 4. CART ASSISTANCE: Add an item by name ───────────────────────────
-    else if (/add|put|include|throw in/.test(lowerMsg)) {
-      const items = await MenuItem.find({ restaurantId, availability: true });
-      const matched = items.find(item => lowerMsg.includes(item.name.toLowerCase()));
-      if (matched) {
-        reply = `🛒 Great choice! I've added **${matched.name}** to your cart.`;
-        action = { type: 'ADD_TO_CART', item: matched };
-        suggestions = [`Show ${matched.category} items`, 'View Cart', 'Checkout'];
-      } else {
-        reply = `I couldn't find that item. Want me to show the full menu so you can pick?`;
-        suggestions = ['Show full menu'];
+    if (isPairing && targets.length > 0) {
+      const target = targets.find(t => t.type === 'specific');
+      if (target) {
+        const coOrders = await Order.aggregate([
+          { $match: { restaurantId: new mongoose.Types.ObjectId(restaurantId), 'items.product': new mongoose.Types.ObjectId(target.product._id) } },
+          { $unwind: '$items' },
+          { $match: { 'items.product': { $ne: new mongoose.Types.ObjectId(target.product._id) } } },
+          { $group: { _id: '$items.product', count: { $sum: 1 }, name: { $first: '$items.name' } } },
+          { $sort: { count: -1 } },
+          { $limit: 3 }
+        ]);
+        if (coOrders.length > 0) reply += (reply ? '\n\n' : '') + `🤝 **People who ordered the ${target.product.name} also loved:**\n\n${coOrders.map(c => `• [**${c.name}**](/item/${c._id})`).join('\n')}`;
+        else reply += (reply ? '\n\n' : '') + `The **${target.product.name}** is amazing on its own, but it pairs great with our sides!`;
+        suggestions.push(...coOrders.map(c => `Add ${c.name}`));
       }
+    } else if (isPairing && targets.length === 0) {
+      reply += (reply ? '\n\n' : '') + `Tell me which item you want pairings for! (e.g. "What goes well with pizza?")`;
     }
 
-    // ── 5. CART ASSISTANCE: Remove / clear ───────────────────────────────
-    else if (/remove|delete|clear cart|empty cart/.test(lowerMsg)) {
-      reply = `🗑️ To remove items from your cart, tap the **–** button next to each item in the cart drawer. To empty everything, close and reopen your cart.\n\nNeed help finding a replacement item?`;
-      suggestions = ['Show menu', 'Recommend something'];
-    }
-
-    // ── 6. COUPON / DISCOUNT ──────────────────────────────────────────────
-    else if (/coupon|discount|promo|code|voucher|offer/.test(lowerMsg)) {
-      reply = `🎟️ **Current Offers:**\n\n• **FIRST10** — 10% off your first order\n• **SAVE5** — $5 off any order over $30\n• **FREEDELIVERY** — Free delivery on orders over $50\n\nApply the code at checkout! Want me to recommend items to hit a discount threshold?`;
-      suggestions = ['Items over $30', 'Items over $50', 'Recommend something'];
-    }
-
-    // ── 7. RECOMMENDATIONS ───────────────────────────────────────────────
-    else if (/recommend|suggest|what.*good|popular|trending|best|favorite|special/.test(lowerMsg)) {
-      // Order-based trending: find most-ordered items
+    if (isTrending) {
       const trending = await Order.aggregate([
         { $match: { restaurantId: new mongoose.Types.ObjectId(restaurantId) } },
         { $unwind: '$items' },
-        { $group: { _id: '$items.menuItem', count: { $sum: '$items.quantity' }, name: { $first: '$items.name' } } },
+        { $group: { _id: '$items.product', count: { $sum: '$items.quantity' }, name: { $first: '$items.name' }, price: { $first: '$items.price' } } },
         { $sort: { count: -1 } },
         { $limit: 3 }
       ]);
-
       if (trending.length > 0) {
-        const itemLines = trending.map((t, i) => `${i + 1}. **${t.name}** — ordered ${t.count} times`).join('\n');
-        reply = `🔥 **Trending right now at this restaurant:**\n\n${itemLines}\n\nWant me to find any of these or something similar?`;
-        suggestions = trending.map(t => `Show ${t.name}`);
-      } else {
-        // Fallback: just return some available items
-        const items = await MenuItem.find({ restaurantId, availability: true }).limit(3);
-        if (items.length > 0) {
-          reply = `✨ **Chef's picks today:**\n\n${formatItems(items)}\n\nInterested in any of these?`;
-          suggestions = items.map(i => `Add ${i.name}`);
-        } else {
-          reply = "Our menu is being updated! Check back soon for fresh recommendations.";
-        }
+        reply += (reply ? '\n\n' : '') + `🔥 **Trending favorites right now:**\n\n${trending.map((t, i) => `${i + 1}. [**${t.name}**](/item/${t._id}) ($${t.price.toFixed(2)})`).join('\n')}`;
+        suggestions.push(...trending.map(t => `Add ${t.name}`));
       }
     }
 
-    // ── 8. SHOW FULL MENU ─────────────────────────────────────────────────
-    else if (/menu|all items|what do you have|what.*serve|food list/.test(lowerMsg)) {
-      const items = await MenuItem.find({ restaurantId, availability: true }).sort({ category: 1 }).limit(10);
-      if (items.length > 0) {
-        reply = `📋 **Our Menu (${items.length} items):**\n\n${formatItems(items)}\n\n_Showing top 10. Filter by category or price for more!_`;
-        suggestions = ['Show cheap items', 'Recommend something', 'View cart'];
-      } else {
-        reply = "The menu is being updated. Please check back soon!";
-      }
-    }
-
-    // ── 9. ABANDONED CART REMINDER ────────────────────────────────────────
-    else if (/cart|checkout|forgot|reminder/.test(lowerMsg)) {
+    // ── FALLBACK & PROACTIVE REMINDERS ───────
+    if (reply === '') {
       if (cart.length > 0) {
-        const total = cart.reduce((s, i) => s + (i.price * i.quantity), 0);
-        reply = `🛒 You have **${cart.length} item(s)** in your cart totalling **$${total.toFixed(2)}**. Ready to checkout? Your food is waiting!`;
-        suggestions = ['Proceed to checkout', 'Keep shopping'];
+        reply = `👋 Welcome back! I noticed you have **${cart.length} item(s)** in your cart totaling **$${cart.reduce((sum, i) => sum + (i.price * i.quantity), 0).toFixed(2)}**.\n\nReady to complete your order?`;
+        suggestions.push('Checkout', 'Clear my cart', 'Recommend something');
       } else {
-        reply = "Your cart is empty! Let me help you find something great to eat.";
-        suggestions = ['Show menu', 'Recommend something'];
+        reply = `👋 Hi! I've been upgraded to handle complex flows:\n\n• **Compound ordering** ("Add 2 burgers and open checkout")\n• **Order Tracker** ("Where is my order?")\n• **Dietary requests** ("Find me vegan options under $15")\n• **FAQs** ("What is your refund policy?")\n\nWhat are you hungering for?`;
+        suggestions.push('Track my order', 'Show cheap vegan food', 'What is popular?');
       }
     }
 
-    // ── 10. FAQ: SHIPPING / DELIVERY ──────────────────────────────────────
-    else if (/shipping|delivery|how long|eta|arrive|wait/.test(lowerMsg)) {
-      reply = `🚚 **Delivery Info:**\n\n• Standard delivery: **30–45 minutes**\n• Express delivery: **15–20 minutes** (+$2 fee)\n• Free delivery on orders over **$50**\n• We deliver within **5km radius** of the restaurant\n\nNeed anything else?`;
-      suggestions = ['Track my order', 'What are the payment options?'];
-    }
-
-    // ── 11. FAQ: RETURNS / REFUNDS ───────────────────────────────────────
-    else if (/return|refund|wrong order|incorrect|complaint/.test(lowerMsg)) {
-      reply = `↩️ **Return & Refund Policy:**\n\nSince we deal in fresh food:\n• We cannot accept physical returns\n• If your order is **incorrect or missing items**, contact us within **30 minutes** of delivery\n• We issue a **full refund** to your original payment method within 3–5 business days\n• For quality concerns, send a photo to help us improve!\n\nSomething wrong with your order?`;
-      suggestions = ['Track my order', 'Talk to support'];
-    }
-
-    // ── 12. FAQ: PAYMENT OPTIONS ─────────────────────────────────────────
-    else if (/payment|pay|card|cash|wallet|stripe/.test(lowerMsg)) {
-      reply = `💳 **We accept:**\n\n• Credit & Debit Cards (Visa, Mastercard, Amex)\n• Apple Pay & Google Pay\n• Stripe-secured online checkout\n\nAll payments are **encrypted and 100% secure**. We do NOT store card details.`;
-      suggestions = ['Proceed to checkout', 'Apply a coupon'];
-    }
-
-    // ── 13. FAQ: OPENING HOURS ───────────────────────────────────────────
-    else if (/hours|open|close|time|schedule|when/.test(lowerMsg)) {
-      reply = `⏰ **Opening Hours:**\n\n• Mon–Fri: **10:00 AM – 10:00 PM**\n• Sat–Sun: **11:00 AM – 11:00 PM**\n• Public Holidays: **12:00 PM – 9:00 PM**\n\nYou can always place an order — it will processed during business hours!`;
-      suggestions = ['Order now', 'Show menu'];
-    }
-
-    // ── 14. SHOW ORDER HISTORY ───────────────────────────────────────────
-    else if (/history|past order|previous|all my order/.test(lowerMsg)) {
-      if (!customerId) {
-        reply = '🔐 Please **sign in** to view your order history.';
-        suggestions = ['Sign In'];
-      } else {
-        const orders = await Order.find({ customerId, restaurantId }).sort({ createdAt: -1 }).limit(5);
-        if (orders.length === 0) {
-          reply = "No past orders found. Let's fix that — browse our menu!";
-          suggestions = ['Show menu'];
-        } else {
-          const orderLines = orders.map((o, i) =>
-            `${i + 1}. $${o.totalAmount.toFixed(2)} — **${o.status}** (${new Date(o.createdAt).toLocaleDateString()})`
-          ).join('\n');
-          reply = `📜 **Your Last ${orders.length} Orders:**\n\n${orderLines}\n\nWant details on any of these?`;
-          suggestions = ['Track latest order', 'Reorder last order'];
-        }
-      }
-    }
-
-    // ── 15. GREETINGS & HELP ─────────────────────────────────────────────
-    else if (/hello|hi|hey|help|what can you|start|begin/.test(lowerMsg)) {
-      reply = `👋 Hi there! I'm your **AI Store Assistant**. Here's what I can do:\n\n🔍 **Search** — "Show me pizza under $15"\n🛒 **Cart** — "Add Margherita to cart"\n📦 **Orders** — "Where is my order?"\n🎟️ **Coupons** — "Do you have any discounts?"\n❓ **FAQ** — "What's your return policy?"\n\nWhat would you like to do?`;
-      suggestions = ['Show menu', 'Track my order', 'Recommend something', 'Any coupons?'];
-    }
-
-    // ── DEFAULT FALLBACK ─────────────────────────────────────────────────
-    else {
-      // Try to match any menu item mentioned
-      const items = await MenuItem.find({ restaurantId, availability: true });
-      const matchedItem = items.find(item => lowerMsg.includes(item.name.toLowerCase()));
-      if (matchedItem) {
-        reply = `🍽️ **${matchedItem.name}** — $${matchedItem.price.toFixed(2)}\n\n${matchedItem.description || 'A great choice!'}\n\nWant to add it to your cart?`;
-        suggestions = [`Add ${matchedItem.name}`, 'Show similar items'];
-      } else {
-        reply = `🤔 I'm not sure how to help with that. Here's what I can assist you with:\n\n💬 Try: "Show me burgers", "Track my order", "Any deals today?", or "What's popular?"`;
-        suggestions = ['Show menu', 'Track my order', 'Any coupons?', 'Recommend something'];
-      }
-    }
-
-    // Simulate AI thinking delay
-    await new Promise(resolve => setTimeout(resolve, 600));
-
-    successResponse(res, 200, 'AI Response', { reply, suggestions, action });
+    suggestions = [...new Set(suggestions)];
+    await new Promise(resolve => setTimeout(resolve, 300));
+    successResponse(res, 200, 'AI Response', { reply, suggestions, actions });
   } catch (error) {
     errorResponse(res, 500, error.message);
   }
 };
 
-// ─── Trending Recommendation Engine ─────────────────────────────────────────
-
 export const getRecommendations = async (req, res) => {
   try {
     const { restaurantId } = req.params;
-
-    // Primary: trending by order frequency
-    let restaurantObjectId;
-    try {
-      restaurantObjectId = new mongoose.Types.ObjectId(restaurantId);
-    } catch {
-      return errorResponse(res, 400, 'Invalid restaurantId');
-    }
+    const rId = new mongoose.Types.ObjectId(restaurantId);
 
     const trending = await Order.aggregate([
-      { $match: { restaurantId: restaurantObjectId } },
+      { $match: { restaurantId: rId } },
       { $unwind: '$items' },
-      { $group: { _id: '$items.menuItem', totalOrdered: { $sum: '$items.quantity' } } },
+      { $group: { _id: '$items.product', totalOrdered: { $sum: '$items.quantity' } } },
       { $sort: { totalOrdered: -1 } },
       { $limit: 6 }
     ]);
 
     if (trending.length >= 2) {
-      // Fetch full MenuItem documents from the trending IDs
       const ids = trending.map(t => t._id);
-      const trendingItems = await MenuItem.find({ _id: { $in: ids }, availability: true });
-      return successResponse(res, 200, 'Trending recommendations', trendingItems);
+      const items = await Product.find({ _id: { $in: ids }, availability: true });
+      return successResponse(res, 200, 'Trending', items);
     }
 
-    // Fallback: random available items
-    const items = await MenuItem.aggregate([
-      { $match: { restaurantId: restaurantId, availability: true } },
-      { $sample: { size: 4 } }
-    ]);
-    successResponse(res, 200, 'Recommendations fetched', items);
+    const items = await Product.aggregate([{ $match: { restaurantId: rId, availability: true } }, { $sample: { size: 4 } }]);
+    successResponse(res, 200, 'Fallback', items);
   } catch (error) {
     errorResponse(res, 500, error.message);
   }

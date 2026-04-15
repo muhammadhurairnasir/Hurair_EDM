@@ -24,7 +24,7 @@ const Dashboard = () => {
   return (
     <div>
       <Helmet>
-        <title>Dashboard Overview | Resova POS</title>
+        <title>Dashboard Overview | Resova E-Commerce</title>
         <meta name="description" content="View live analytics, active orders, total revenue, and connected e-commerce store metrics." />
       </Helmet>
       <h1 className="text-2xl font-bold mb-6">Dashboard Overview</h1>

@@ -22,7 +22,7 @@ const Orders = () => {
     try {
       const [tablesRes, menuRes] = await Promise.all([
         api.get('/tables'),
-        api.get('/menu')
+        api.get('/products')
       ]);
       setTables(tablesRes.data.data.filter(t => t.status === 'available'));
       setMenuItems(menuRes.data.data);
@@ -48,7 +48,7 @@ const Orders = () => {
 
   const handleStatusChange = async (id, status) => {
     try {
-      await api.put(`/orders/${id}/status`, { status });
+      await api.put(`/orders/${id}`, { status });
       fetchOrders();
     } catch (error) {
       console.error(error);
@@ -58,19 +58,19 @@ const Orders = () => {
   const handleAddItem = () => {
     if (!selectedItem) return;
     const item = menuItems.find(m => m._id === selectedItem);
-    const existing = formData.items.find(i => i.menuItem === selectedItem);
+    const existing = formData.items.find(i => i.product === selectedItem);
     
     let updatedItems;
     if (existing) {
-      updatedItems = formData.items.map(i => i.menuItem === selectedItem ? { ...i, quantity: i.quantity + Number(itemQuantity) } : i);
+      updatedItems = formData.items.map(i => i.product === selectedItem ? { ...i, quantity: i.quantity + Number(itemQuantity) } : i);
     } else {
-      updatedItems = [...formData.items, { menuItem: item._id, name: item.name, price: item.price, quantity: Number(itemQuantity) }];
+      updatedItems = [...formData.items, { product: item._id, name: item.name, price: item.price, quantity: Number(itemQuantity) }];
     }
     setFormData({ ...formData, items: updatedItems });
   };
 
   const handleRemoveItem = (id) => {
-    setFormData({ ...formData, items: formData.items.filter(i => i.menuItem !== id) });
+    setFormData({ ...formData, items: formData.items.filter(i => i.product !== id) });
   };
 
   const handleAddSubmit = async (e) => {
@@ -147,11 +147,11 @@ const Orders = () => {
             
             <ul className="space-y-2 max-h-32 overflow-y-auto">
               {formData.items.map(item => (
-                <li key={item.menuItem} className="flex justify-between items-center text-sm bg-gray-800 p-2 rounded-lg border border-gray-700">
+                <li key={item.product} className="flex justify-between items-center text-sm bg-gray-800 p-2 rounded-lg border border-gray-700">
                   <span className="truncate">{item.quantity}x {item.name}</span>
                   <div className="flex items-center gap-3">
                     <span className="text-emerald-400 font-medium">${(item.price * item.quantity).toFixed(2)}</span>
-                    <button onClick={() => handleRemoveItem(item.menuItem)} className="text-red-400 hover:text-red-300">✕</button>
+                    <button onClick={() => handleRemoveItem(item.product)} className="text-red-400 hover:text-red-300">✕</button>
                   </div>
                 </li>
               ))}

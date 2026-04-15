@@ -40,7 +40,7 @@ const Login = () => {
           <div className="w-16 h-16 bg-blue-500/10 rounded-2xl flex items-center justify-center mb-4 border border-blue-500/20">
             <UtensilsCrossed className="w-8 h-8 text-blue-400" />
           </div>
-          <h2 className="text-2xl font-bold text-white">Login to POS</h2>
+          <h2 className="text-2xl font-bold text-white">Login to Vendor Portal</h2>
           <p className="text-gray-400 text-sm mt-1">Manage your restaurant efficiently</p>
         </div>
 

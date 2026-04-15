@@ -1,6 +1,5 @@
 import User from '../models/User.model.js';
 import Restaurant from '../models/Restaurant.model.js';
-import Subscription from '../models/Subscription.model.js';
 import { generateToken } from '../utils/generateToken.js';
 import { successResponse, errorResponse } from '../utils/responseHandler.js';
 
@@ -23,8 +22,6 @@ export const register = async (req, res) => {
     
     user.restaurantId = restaurant._id;
     await user.save();
-
-    await Subscription.create({ restaurantId: restaurant._id, plan: 'Basic' });
 
     successResponse(res, 201, 'Registered successfully', {
       _id: user._id, name: user.name, email: user.email, token: generateToken(user._id)

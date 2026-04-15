@@ -15,14 +15,16 @@ const OrderCard = ({ order, onStatusChange }) => {
           value={order.status}
           onChange={(e) => onStatusChange(order._id, e.target.value)}
           className={`text-sm px-3 py-1 rounded-full border outline-none font-medium ${
-            order.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-            order.status === 'Preparing' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+            order.status === 'delivered' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+            order.status === 'shipped' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+            order.status === 'cancelled' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
             'bg-amber-500/10 text-amber-400 border-amber-500/20'
           }`}
         >
-          <option value="Pending" className="bg-gray-800">Pending</option>
-          <option value="Preparing" className="bg-gray-800">Preparing</option>
-          <option value="Completed" className="bg-gray-800">Completed</option>
+          <option value="pending" className="bg-gray-800">Pending</option>
+          <option value="shipped" className="bg-gray-800">Shipped</option>
+          <option value="delivered" className="bg-gray-800">Delivered</option>
+          <option value="cancelled" className="bg-gray-800">Cancelled</option>
         </select>
       </div>
       <div className="space-y-2 mb-4">

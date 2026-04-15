@@ -9,6 +9,6 @@ export const getOrders = async (restaurantId) => {
   return await Order.find({ restaurantId }).sort({ createdAt: -1 });
 };
 
-export const updateOrderStatus = async (orderId, restaurantId, status) => {
-  return await Order.findOneAndUpdate({ _id: orderId, restaurantId }, { status }, { new: true });
+export const updateOrder = async (orderId, restaurantId, updates) => {
+  return await Order.findOneAndUpdate({ _id: orderId, restaurantId }, updates, { new: true });
 };

@@ -20,7 +20,7 @@ const Menu = () => {
 
   const fetchMenu = async () => {
     try {
-      const { data } = await api.get('/menu');
+      const { data } = await api.get('/products');
       setItems(data.data);
     } catch (error) {
       console.error(error);
@@ -29,7 +29,7 @@ const Menu = () => {
 
   const handleDelete = async (id) => {
     if (confirm('Delete this item?')) {
-      await api.delete(`/menu/${id}`);
+      await api.delete(`/products/${id}`);
       fetchMenu();
     }
   };
@@ -54,9 +54,9 @@ const Menu = () => {
       };
 
       if (editId) {
-        await api.put(`/menu/${editId}`, payload);
+        await api.put(`/products/${editId}`, payload);
       } else {
-        await api.post('/menu', payload);
+        await api.post('/products', payload);
       }
       closeModal();
       fetchMenu();
@@ -92,15 +92,15 @@ const Menu = () => {
   return (
     <div>
       <Helmet>
-        <title>Menu Engineering & Store Items | Resova POS</title>
-        <meta name="description" content="Manage availability, edit prices, and configure on-page SEO fields for all your menus and e-commerce inventory items quickly and efficiently." />
+        <title>Products & Inventory | Resova E-commerce</title>
+        <meta name="description" content="Manage availability, edit prices, and configure on-page SEO fields for all your e-commerce inventory items quickly and efficiently." />
       </Helmet>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Menu Management</h1>
+        <h1 className="text-2xl font-bold">Products Management</h1>
         <button 
           onClick={() => setIsModalOpen(true)}
           className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl transition-colors font-medium">
-          Add Item
+          Add Product
         </button>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -110,7 +110,7 @@ const Menu = () => {
         {items.length === 0 && <div className="text-gray-500">No menu items found.</div>}
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={closeModal} title={editId ? "Edit Menu Item" : "Add Menu Item"}>
+      <Modal isOpen={isModalOpen} onClose={closeModal} title={editId ? "Edit Product" : "Add Product"}>
         <form onSubmit={handleAddSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-400 mb-1">Item Name</label>
