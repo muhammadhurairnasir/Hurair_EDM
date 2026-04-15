@@ -31,3 +31,26 @@ export const deleteCoupon = async (req, res) => {
     errorResponse(res, 500, error.message);
   }
 };
+
+export const verifyPublicCoupon = async (req, res) => {
+  try {
+    const { restaurantId } = req.params;
+    const { code, cartTotal } = req.body;
+
+    if (!code) return errorResponse(res, 400, 'Coupon code is required');
+
+    const coupon = await Coupon.findOne({ restaurantId, code: code.toUpperCase(), isActive: true });
+    
+    if (!coupon) return errorResponse(res, 404, 'Invalid or expired coupon code');
+    
+    const now = new Date();
+    if (coupon.validFrom && now < coupon.validFrom) return errorResponse(res, 400, 'Coupon is not yet active');
+    if (coupon.validUntil && now > coupon.validUntil) return errorResponse(res, 400, 'Coupon has expired');
+    if (coupon.usageLimit && coupon.usageCount >= coupon.usageLimit) return errorResponse(res, 400, 'Coupon usage limit reached');
+    if (coupon.minOrderValue && cartTotal < coupon.minOrderValue) return errorResponse(res, 400, `Minimum order value of $${coupon.minOrderValue} required`);
+
+    successResponse(res, 200, 'Coupon is valid', coupon);
+  } catch (error) {
+    errorResponse(res, 500, error.message);
+  }
+};

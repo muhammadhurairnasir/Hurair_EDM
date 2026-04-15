@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { MessageSquare, X, Send, Bot, User, Loader2, Sparkles, ShoppingCart, Package, Tag, ChevronDown } from 'lucide-react';
+import { MessageSquare, X, Send, Bot, User, Loader2, Sparkles, ShoppingCart, Package, Tag, ChevronDown, RefreshCw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../../services/api.js';
 /** Renders **bold** markdown syntax and [Text](link) inside chat bubbles */
@@ -136,8 +136,6 @@ export default function Chatbot({ restaurantId, customerId, cart = [], onAddToCa
           onClearCart?.();
         }
         if (act.type === 'OPEN_CHECKOUT') {
-          setIsOpen(false);
-          sessionStorage.setItem('chatbot_isOpen', JSON.stringify(false));
           onOpenCheckout?.();
         }
         if (act.type === 'APPLY_COUPON') {
@@ -205,6 +203,23 @@ export default function Chatbot({ restaurantId, customerId, cart = [], onAddToCa
               </div>
             </div>
             <div className="flex items-center gap-1">
+              <button
+                onClick={() => {
+                  const defaultMsg = [
+                    {
+                      role: 'bot',
+                      text: '👋 Hi! I\'m your **AI Store Assistant**.\n\nI can help you:\n• 🔍 Search & filter menu items\n• 📦 Track your orders\n• 🛒 Manage your cart\n• 🎟️ Find coupons & deals\n• ❓ Answer any FAQs\n\nWhat can I do for you today?',
+                      suggestions: ['Show menu', 'Track my order', 'Any coupons?', 'Recommend something']
+                    }
+                  ];
+                  setMessages(defaultMsg);
+                  sessionStorage.setItem('chatbot_messages', JSON.stringify(defaultMsg));
+                }}
+                title="Reset Chat"
+                className="text-white/80 hover:text-white bg-white/10 hover:bg-white/20 p-1.5 rounded-lg transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
               <button
                 onClick={() => setIsMinimized(!isMinimized)}
                 className="text-white/80 hover:text-white bg-white/10 hover:bg-white/20 p-1.5 rounded-lg transition-colors"

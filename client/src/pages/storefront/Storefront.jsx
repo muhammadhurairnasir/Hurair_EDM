@@ -61,9 +61,23 @@ const Storefront = () => {
     if (location.state?.openCart) {
       setCheckoutStep('cart');
       setIsCartOpen(true);
+      
+      const couponCode = location.state.applyCoupon;
       navigate(location.pathname, { replace: true, state: {} });
+
+      if (couponCode && restaurantId) {
+        setPromoCode(couponCode);
+        const subForCoupon = cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
+        api.post(`/coupons/public/verify/${restaurantId}`, { code: couponCode, cartTotal: subForCoupon })
+          .then(({ data }) => {
+            if (data.success) {
+              setAppliedPromo(couponCode);
+              setDiscountInfo({ type: data.data.discountType, value: data.data.discountValue });
+            }
+          }).catch(console.error);
+      }
     }
-  }, [location.state, navigate, location.pathname]);
+  }, [location.state, navigate, location.pathname, restaurantId, cart]);
 
   useEffect(() => {
     if (slug) localStorage.setItem(`cart_${slug}`, JSON.stringify(cart));

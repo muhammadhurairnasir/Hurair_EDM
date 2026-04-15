@@ -67,7 +67,7 @@ const seedDatabase = async () => {
     await adminUser.save();
 
     console.log('Populating Premium E-Commerce Catalog with 80 Items...');
-    const products = await Product.insertMany([
+    const rawProducts = [
       // 20 BURGERS
       { restaurantId: restaurant._id, name: 'Double Wagyu Burger', price: 24.99, category: 'Burgers', description: 'Two 8oz wagyu patties, aged cheddar, caramelised onions, truffle mayo on an artisan brioche.', availability: true },
       { restaurantId: restaurant._id, name: 'Classic Smash Burger', price: 14.50, category: 'Burgers', description: 'Two smashed beef patties, American cheese, house pickles, secret sauce.', availability: true },
@@ -155,7 +155,17 @@ const seedDatabase = async () => {
       { restaurantId: restaurant._id, name: 'Glazed Donut Burger', price: 12.00, category: 'Desserts', description: 'Yes, dessert! A sweet filling stuffed inside a hot glazed donut.', availability: true },
       { restaurantId: restaurant._id, name: 'Chocolate Chip Cookie Skillet', price: 11.50, category: 'Desserts', description: 'A giant warm cookie served in a cast iron skillet with ice cream.', availability: true },
       { restaurantId: restaurant._id, name: 'Matcha Green Tea Ice Cream', price: 6.00, category: 'Desserts', description: 'Three smooth scoops of authentic Japanese matcha ice cream.', availability: true }
-    ]);
+    ];
+
+    const products = await Product.insertMany(rawProducts.map(p => ({
+      ...p,
+      seo: {
+        title: `${p.name} - Resova`,
+        description: p.description,
+        slug: p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+        keywords: [p.category.toLowerCase(), ...p.name.toLowerCase().split(' ')]
+      }
+    })));
 
     console.log('Configuring Local Operations (Tables & Staff)...');
     const tables = await Table.insertMany([

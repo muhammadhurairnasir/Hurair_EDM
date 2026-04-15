@@ -175,7 +175,7 @@ export const handleChat = async (req, res) => {
       /\b(checkout|pay now|pay for|view cart|order now|finish order)\b/.test(lowerMsg) ||
       /open.*(cart|checkout|bag)|take me to (cart|checkout|payment|bag)|go to (cart|bag)|finish/.test(lowerMsg)
     );
-    const isCoupon = /coupon|discount|promo|code|voucher|offer|deal|cheaper|save money|redeem|apply\s(save10|test1|flat5)/.test(lowerMsg);
+    const isCoupon = /coupon|discount|promo|code|voucher|offer|deal|cheaper|save money|redeem|apply\s([a-z0-9]+)/.test(lowerMsg);
     const isTrending = /recommend|suggest|what.*good|popular|trending|best|favorite|special/.test(lowerMsg);
     const isPairing = /also bought|goes.{0,8}with|pair|recommend with|similar/.test(lowerMsg);
     const isRating = /top rated|highly rated|best rated|best reviewed|\d\s?stars?/.test(lowerMsg);
@@ -429,7 +429,16 @@ export const handleChat = async (req, res) => {
       }
     }
 
-    suggestions = [...new Set(suggestions)];
+    // ── UNIVERSAL SUGGESTION SAFETY NET ───────
+    if (suggestions.length === 0) {
+      if (cart && cart.length > 0) {
+        suggestions.push('View Cart', 'Checkout', 'Recommend sides');
+      } else {
+        suggestions.push('Show menu', "What's popular?", 'Track my order');
+      }
+    }
+
+    suggestions = [...new Set(suggestions)].slice(0, 4);
     await new Promise(resolve => setTimeout(resolve, 300));
     successResponse(res, 200, 'AI Response', { reply, suggestions, actions });
   } catch (error) {

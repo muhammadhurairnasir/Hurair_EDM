@@ -340,7 +340,7 @@ const ProductDetail = () => {
             localStorage.removeItem(`cart_${slug}`);
             setLocalCart([]);
           }}
-          onApplyCoupon={() => navigate('/', { state: { openCart: true } })} // Take to storefront to handle full checkout payload
+          onApplyCoupon={(coupon) => navigate('/', { state: { openCart: true, applyCoupon: coupon.code } })} // Take to storefront to handle full checkout payload
           onOpenCheckout={() => navigate('/', { state: { openCart: true } })} // Redirect to storefront and trigger cart open
         />
       )}
