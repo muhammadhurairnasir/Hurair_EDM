@@ -438,7 +438,7 @@ export const handleChat = async (req, res) => {
       }
     }
 
-    suggestions = [...new Set(suggestions)].slice(0, 4);
+    suggestions = [...new Set(suggestions)].slice(0, 20);
     await new Promise(resolve => setTimeout(resolve, 300));
     successResponse(res, 200, 'AI Response', { reply, suggestions, actions });
   } catch (error) {
