@@ -31,7 +31,7 @@ const Dashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <DashboardCard title="Today's Orders" value={stats.ordersToday} icon={ShoppingBag} colorClass="bg-blue-500/10 text-blue-400" />
         <DashboardCard title="Today's Revenue" value={`$${stats.totalRevenue.toFixed(2)}`} icon={DollarSign} colorClass="bg-emerald-500/10 text-emerald-400" />
-        <DashboardCard title="Menu Items" value={stats.totalMenuItems} icon={UtensilsCrossed} colorClass="bg-purple-500/10 text-purple-400" />
+        <DashboardCard title="Menu Items" value={stats.totalProducts} icon={UtensilsCrossed} colorClass="bg-purple-500/10 text-purple-400" />
         <DashboardCard title="Active Tables" value={stats.activeTables} icon={TableProperties} colorClass="bg-amber-500/10 text-amber-400" />
       </div>
     </div>

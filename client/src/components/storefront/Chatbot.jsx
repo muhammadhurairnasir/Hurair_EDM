@@ -100,7 +100,11 @@ export default function Chatbot({ restaurantId, customerId, cart = [], onAddToCa
     if (!text.trim() || isTyping) return;
 
     const userMsg = { role: 'user', text };
-    setMessages(prev => [...prev, userMsg]);
+    setMessages(prev => {
+      const newMessages = [...prev, userMsg];
+      sessionStorage.setItem('chatbot_messages', JSON.stringify(newMessages));
+      return newMessages;
+    });
     setInput('');
     setIsTyping(true);
 
@@ -117,11 +121,11 @@ export default function Chatbot({ restaurantId, customerId, cart = [], onAddToCa
         suggestions: data.data.suggestions || []
       };
 
-      setMessages(prev => {
-        const newMessages = [...prev, botMsg];
-        sessionStorage.setItem('chatbot_messages', JSON.stringify(newMessages));
-        return newMessages;
-      });
+      // Force synchronous save BEFORE executing actions that might unmount component
+      const stored = JSON.parse(sessionStorage.getItem('chatbot_messages') || '[]');
+      const newMessagesWithBot = [...stored, botMsg];
+      sessionStorage.setItem('chatbot_messages', JSON.stringify(newMessagesWithBot));
+      setMessages(newMessagesWithBot);
 
       // Handle direct cart actions (supports single or array of actions)
       const actions = data.data.actions || (data.data.action ? [data.data.action] : []);

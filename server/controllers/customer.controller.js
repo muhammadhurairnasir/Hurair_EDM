@@ -35,7 +35,9 @@ export const getWishlist = async (req, res) => {
 
 export const getMyOrders = async (req, res) => {
   try {
-    const orders = await Order.find({ customerId: req.user._id }).sort({ createdAt: -1 });
+    const orders = await Order.find({ customerId: req.user._id })
+      .populate('items.product', 'name price images seo')
+      .sort({ createdAt: -1 });
     successResponse(res, 200, 'Customer orders fetched', orders);
   } catch (error) {
     errorResponse(res, 500, error.message);

@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Order from '../models/Order.model.js';
 import Product from '../models/Product.model.js';
 import Table from '../models/Table.model.js';
@@ -12,7 +13,7 @@ export const getDashboardStats = async (restaurantId) => {
   });
 
   const revenueAggregation = await Order.aggregate([
-    { $match: { restaurantId, status: 'Completed', createdAt: { $gte: today } } },
+    { $match: { restaurantId: new mongoose.Types.ObjectId(restaurantId), paymentStatus: 'paid', createdAt: { $gte: today } } },
     { $group: { _id: null, total: { $sum: '$totalAmount' } } }
   ]);
   const totalRevenue = revenueAggregation.length > 0 ? revenueAggregation[0].total : 0;

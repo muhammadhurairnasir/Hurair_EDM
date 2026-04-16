@@ -133,7 +133,7 @@ const CustomerDashboard = () => {
                       </span>
                     </div>
                     <ul className="text-gray-700 text-sm font-medium space-y-1.5 border-l-2 border-orange-100 pl-3">
-                      {order.items.map((item, idx) => <li key={idx}><span className="text-orange-500 font-bold">{item.quantity}x</span> {item.name}</li>)}
+                      {order.items.map((item, idx) => <li key={idx}><span className="text-orange-500 font-bold">{item.quantity}x</span> {item.name || item.product?.name || 'Item'}</li>)}
                     </ul>
                   </div>
                   <div className="text-left md:text-right bg-gray-50 p-4 rounded-xl w-full md:w-auto">

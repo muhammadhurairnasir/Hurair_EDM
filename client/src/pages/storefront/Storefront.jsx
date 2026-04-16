@@ -110,9 +110,6 @@ const Storefront = () => {
       const { data } = await api.get(`/products/public/${restaurantId}`);
       if (data.data) {
         setItems(data.data.filter(item => item.availability));
-        if (data.data[0]?.seo?.title) {
-          setSeoConfig({ title: `Order Online | ${data.data[0].seo.title}`, description: data.data[0].seo.description });
-        }
       }
     } catch (error) {
       console.error('Failed to load menu', error);
@@ -217,10 +214,24 @@ const Storefront = () => {
   const handlePaymentSuccess = async () => {
     // After Stripe payment confirmed, save the order
     try {
-      const payload = { restaurantId, items: cart, totalAmount: finalCartTotal, status: 'pending' };
+      const orderItems = cart.map(i => ({
+        product: i.product || i._id,
+        name: i.name,
+        quantity: i.quantity,
+        price: i.price
+      }));
+      const payload = {
+        restaurantId,
+        items: orderItems,
+        totalAmount: finalCartTotal,
+        status: 'pending',
+        paymentStatus: 'paid'
+      };
       if (user?.role === 'customer') payload.customerId = user._id;
       await api.post('/orders/public', payload);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error('Failed to save order:', e?.response?.data || e.message);
+    }
     setCart([]);
     setAppliedPromo('');
     setDiscountInfo(null);
